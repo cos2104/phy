@@ -1,0 +1,965 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>다중 전하 전기력선·전기장 및 전위 시뮬레이션</title>
+<style>
+  :root{
+    --bg:#f4f6f8;
+    --panel:#ffffff;
+    --text:#1f2937;
+    --muted:#6b7280;
+    --grid:#e6e8ec;
+    --line:#111111;
+    --green:#15803d;
+    --blue:#2563eb;
+    --purple:#8b5cf6;
+  }
+  *{box-sizing:border-box}
+  body{
+    margin:0;
+    font-family:"Segoe UI", Arial, sans-serif;
+    background:var(--bg);
+    color:var(--text);
+  }
+  .wrap{
+    display:grid;
+    grid-template-columns:360px 1fr;
+    gap:16px;
+    padding:16px;
+    min-height:100vh;
+  }
+  .panel,.stage{
+    background:var(--panel);
+    border-radius:20px;
+    box-shadow:0 8px 24px rgba(0,0,0,.08);
+  }
+  .panel{
+    padding:18px;
+    overflow:auto;
+    max-height:calc(100vh - 32px);
+  }
+  .stage{
+    position:relative;
+    overflow:hidden;
+    display: flex;
+    flex-direction: column;
+  }
+  canvas{
+    display:block;
+    width:100%;
+    flex: 1; 
+    background:var(--bg);
+    cursor:grab;
+  }
+  canvas:active{
+    cursor:grabbing;
+  }
+  h1{margin:0 0 10px;font-size:22px}
+  h2{margin:18px 0 8px;font-size:16px}
+  .desc,.formula,.small{
+    font-size:13px;
+    line-height:1.55;
+    color:var(--muted);
+  }
+  .formula{
+    background:#f8fafc;
+    border:1px solid #e5e7eb;
+    border-radius:14px;
+    padding:10px 12px;
+    color:#374151;
+  }
+  .eq{
+    font-family:"Cambria Math","Times New Roman",serif;
+    font-size:18px;
+    color:#111827;
+    margin:4px 0 6px;
+  }
+  .control{margin:12px 0}
+  .control label{
+    display:flex;
+    justify-content:space-between;
+    align-items:center;
+    gap:8px;
+    font-weight:600;
+    margin-bottom:6px;
+  }
+  .value{
+    color:var(--blue);
+    font-variant-numeric:tabular-nums;
+  }
+  input[type="range"]{width:100%}
+  .row{
+    display:grid;
+    grid-template-columns:1fr 1fr;
+    gap:8px;
+    margin-top:12px;
+  }
+  button{
+    width:100%;
+    border:none;
+    border-radius:12px;
+    padding:10px 12px;
+    background:#111827;
+    color:#fff;
+    cursor:pointer;
+    font-weight:600;
+  }
+  button.secondary{
+    background:#e5e7eb;
+    color:#111827;
+  }
+  .charge-card{
+    margin:12px 0;
+    border:1px solid #e5e7eb;
+    border-radius:16px;
+    padding:12px;
+    background:#fcfcfd;
+  }
+  .charge-card.hidden{
+    opacity:.72;
+  }
+  .charge-header{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    gap:8px;
+    margin-bottom:6px;
+  }
+  .charge-name{
+    font-weight:700;
+  }
+  .badge{
+    border-radius:999px;
+    padding:4px 9px;
+    font-size:12px;
+    font-weight:700;
+    color:#fff;
+  }
+  .badge.pos{background:#dc2626}
+  .badge.neg{background:#0284c7}
+  .badge.zero{background:#6b7280}
+  .mini-actions{
+    display:flex;
+    gap:6px;
+    margin-top:8px;
+  }
+  .mini-actions button{
+    padding:8px 10px;
+    font-size:12px;
+    border-radius:10px;
+  }
+  .legend{
+    position:absolute;
+    left:14px;
+    top:14px;
+    background:rgba(255,255,255,.95);
+    border-radius:12px;
+    padding:10px 12px;
+    font-size:13px;
+    line-height:1.5;
+    box-shadow:0 4px 12px rgba(0,0,0,.08);
+    pointer-events: none;
+  }
+  .legend strong{display:block;margin-bottom:4px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="panel">
+    <h1>다중 전하 전기력선·전기장 시뮬레이션</h1>
+    <div class="desc">
+      q1, q2 기본 전하에 더해 q3, q4를 추가할 수 있습니다.<br>
+      모든 전하의 위치를 드래그로 바꿀 수 있고, 전하량을 각각 조절할 수 있습니다.
+    </div>
+
+    <h2>전기장 식</h2>
+    <div class="formula">
+      <div class="eq">E = kQ / r² &nbsp;|&nbsp; V = kQ / r</div>
+      점전하가 만드는 전기장의 크기는 거리 제곱에 반비례하며, 전위는 거리에 반비례합니다. 여러 전하가 있을 때는 중첩의 원리가 적용됩니다.
+    </div>
+
+    <h2>전체 설정</h2>
+    <div class="control">
+      <label><span>전기력선 밀도</span><span class="value" id="densityLabel">16</span></label>
+      <input id="densityRange" type="range" min="8" max="24" step="1" value="16">
+    </div>
+    <div class="control">
+      <label><span>전기장 화살표 배율</span><span class="value" id="arrowScaleLabel">1.7×</span></label>
+      <input id="arrowScaleRange" type="range" min="0.8" max="2.8" step="0.1" value="1.7">
+    </div>
+
+    <div class="row">
+      <button id="addQ3Btn">q3 추가/제거</button>
+      <button id="addQ4Btn">q4 추가/제거</button>
+    </div>
+    <div class="row">
+      <button id="resetBtn">기본 위치로</button>
+      <button id="toggleGridBtn" class="secondary">격자 숨기기</button>
+    </div>
+
+    <h2>전하 설정</h2>
+    <div id="chargesPanel"></div>
+
+    <h2>사용 방법</h2>
+    <div class="small">
+      • 전하를 드래그하여 이동할 수 있습니다.<br>
+      • <b>보라색 십자 마크(전위 측정기)</b>를 드래그하여 특정 지점의 전위(V)를 측정할 수 있습니다.<br>
+      • <b>마우스 휠</b>로 화면을 확대/축소할 수 있습니다.<br>
+      • <b>바탕화면 드래그</b>로 시점을 이동(Pan)할 수 있습니다.<br>
+      • 전기력선 위를 클릭하면 해당 지점의 전기장 벡터가 표시됩니다.
+    </div>
+  </div>
+
+  <div class="stage" id="stage">
+    <div class="legend">
+      <strong>표시 규칙</strong>
+      전기력선 방향: 양전하 → 음전하<br>
+      초록 화살표: 클릭 지점의 전기장<br>
+      보라색 십자: 전위 측정기 (드래그 가능)
+    </div>
+    <canvas id="canvas"></canvas>
+  </div>
+</div>
+
+<script>
+(() => {
+  const canvas = document.getElementById('canvas');
+  const ctx = canvas.getContext('2d');
+  const chargesPanel = document.getElementById('chargesPanel');
+  const stage = document.getElementById('stage');
+
+  const ui = {
+    densityRange: document.getElementById('densityRange'),
+    arrowScaleRange: document.getElementById('arrowScaleRange'),
+    densityLabel: document.getElementById('densityLabel'),
+    arrowScaleLabel: document.getElementById('arrowScaleLabel'),
+    addQ3Btn: document.getElementById('addQ3Btn'),
+    addQ4Btn: document.getElementById('addQ4Btn'),
+    resetBtn: document.getElementById('resetBtn'),
+    toggleGridBtn: document.getElementById('toggleGridBtn'),
+  };
+
+  let W = 0, H = 0;
+  const K = 9000;
+  
+  // 끊김과 꺾임 해결을 위해 보폭(STEP)은 줄이고 계산 횟수(limitSteps)는 늘림
+  const STEP = 2.0; 
+  const CHARGE_RADIUS = 20;
+  const START_OFFSET = CHARGE_RADIUS; 
+  const CLICK_TOL = 12;
+
+  let showGrid = true;
+  let lines = [];
+  let hoverInfo = null;
+
+  let camera = { x: 0, y: 0, zoom: 1 };
+  let draggingId = null;
+  let isDraggingCharge = false; 
+  let isPanning = false;
+  let panStart = null;
+  let mouseMoveDist = 0;
+  let lastMouseP = { x: 0, y: 0 };
+  
+  let calcTimer = null; 
+
+  let probe = { x: 640, y: 200 };
+
+  const resizeObserver = new ResizeObserver(entries => {
+    const rect = entries[0].contentRect;
+    canvas.width = rect.width;
+    canvas.height = rect.height;
+    W = rect.width;
+    H = rect.height;
+    if (probe.x === 640 && W > 0) {
+      probe.x = W / 2;
+      probe.y = H / 4;
+    }
+    render();
+  });
+  resizeObserver.observe(stage);
+
+  function defaultCharges() {
+    return [
+      {id:'q1', x:420, y:400, q: 3.0, active:true},
+      {id:'q2', x:760, y:400, q:-3.0, active:true},
+      {id:'q3', x:590, y:220, q: 2.0, active:false},
+      {id:'q4', x:590, y:580, q:-2.0, active:false},
+    ];
+  }
+  let charges = defaultCharges();
+
+  function activeCharges() { return charges.filter(c => c.active); }
+  function clamp(v, min, max){ return Math.max(min, Math.min(max, v)); }
+
+  function updateTopLabels() {
+    ui.densityLabel.textContent = ui.densityRange.value;
+    ui.arrowScaleLabel.textContent = `${Number(ui.arrowScaleRange.value).toFixed(1)}×`;
+  }
+
+  function renderChargesPanel() {
+    chargesPanel.innerHTML = '';
+    charges.forEach((c) => {
+      const card = document.createElement('div');
+      card.className = 'charge-card' + (c.active ? '' : ' hidden');
+      const badgeCls = c.q > 1e-9 ? 'pos' : (c.q < -1e-9 ? 'neg' : 'zero');
+      const badgeTxt = c.q > 1e-9 ? '양전하' : (c.q < -1e-9 ? '음전하' : '0 C');
+
+      card.innerHTML = `
+        <div class="charge-header">
+          <div class="charge-name">${c.id}</div>
+          <div class="badge ${badgeCls}">${badgeTxt}</div>
+        </div>
+        <div class="control">
+          <label>
+            <span>전하량</span>
+            <span class="value">${c.q > 1e-9 ? '+' : ''}${c.q.toFixed(1)} C</span>
+          </label>
+          <input type="range" min="-5" max="5" step="0.1" value="${c.q}" data-role="chargeRange" data-id="${c.id}" ${c.active ? '' : 'disabled'}>
+        </div>
+        <div class="small">
+          ${c.active ? '캔버스에서 드래그하여 위치를 이동할 수 있습니다.' : '추가 버튼을 눌러 시뮬레이션에 포함할 수 있습니다.'}
+        </div>
+        <div class="mini-actions">
+          <button class="secondary" data-role="toggleCharge" data-id="${c.id}">${c.active ? '제거' : '추가'}</button>
+        </div>
+      `;
+      chargesPanel.appendChild(card);
+    });
+
+    chargesPanel.querySelectorAll('[data-role="chargeRange"]').forEach(el => {
+      el.addEventListener('input', (e) => {
+        const id = e.target.dataset.id;
+        const val = Number(e.target.value);
+        charges.find(c => c.id === id).q = val;
+        hoverInfo = null;
+        
+        const card = e.target.closest('.charge-card');
+        card.querySelector('.value').textContent = `${val > 1e-9 ? '+' : ''}${val.toFixed(1)} C`;
+        const badge = card.querySelector('.badge');
+        badge.className = `badge ${val > 1e-9 ? 'pos' : (val < -1e-9 ? 'neg' : 'zero')}`;
+        badge.textContent = val > 1e-9 ? '양전하' : (val < -1e-9 ? '음전하' : '0 C');
+        
+        scheduleCompute(); 
+      });
+    });
+
+    chargesPanel.querySelectorAll('[data-role="toggleCharge"]').forEach(el => {
+      el.addEventListener('click', (e) => toggleCharge(e.target.dataset.id));
+    });
+  }
+
+  function toggleCharge(id) {
+    const c = charges.find(ch => ch.id === id);
+    if (id === 'q1' || id === 'q2') { c.active = true; return; }
+    c.active = !c.active;
+    hoverInfo = null;
+    renderChargesPanel();
+    recomputeAndRender();
+  }
+
+  // 지정된 좌표의 단위 전기장 벡터(방향만)를 반환 (RK4용)
+  function getFieldUnitVector(x, y) {
+    let Ex = 0, Ey = 0;
+    const acts = activeCharges();
+    for (const c of acts) {
+      if (Math.abs(c.q) < 1e-9) continue;
+      const dx = x - c.x, dy = y - c.y;
+      const r2 = dx*dx + dy*dy;
+      // 전하 내부로 들어가면 계산 제외 (충돌 처리)
+      if (r2 < (CHARGE_RADIUS * 0.9)**2) continue; 
+      const r = Math.sqrt(r2);
+      if (r < 1e-6) continue;
+      const e = K * c.q / r2;
+      Ex += e * dx / r;
+      Ey += e * dy / r;
+    }
+    const E = Math.hypot(Ex, Ey);
+    if (E < 1e-12) return null; // 전기장이 거의 없는 곳
+    return { ux: Ex / E, uy: Ey / E, E };
+  }
+
+  // 클릭 지점용 필드 함수 (크기 포함)
+  function getFieldAt(x, y) {
+    let Ex = 0, Ey = 0;
+    for (const c of activeCharges()) {
+      if (Math.abs(c.q) < 1e-9) continue;
+      const dx = x - c.x, dy = y - c.y;
+      const r2 = dx*dx + dy*dy;
+      if (r2 < (CHARGE_RADIUS * 0.95)**2) continue; 
+      const r = Math.sqrt(r2);
+      if (r < 1e-6) continue;
+      const e = K * c.q / r2;
+      Ex += e * dx / r;
+      Ey += e * dy / r;
+    }
+    return {Ex, Ey, E: Math.hypot(Ex, Ey)};
+  }
+
+  function buildSeeds() {
+    const density = Number(ui.densityRange.value);
+    const seeds = [];
+    const acts = activeCharges();
+
+    for (const c of acts) {
+      if (Math.abs(c.q) < 1e-9) continue;
+      const count = Math.max(10, Math.round(Math.abs(c.q) * density));
+      for (let i = 0; i < count; i++) {
+        const a = i * Math.PI * 2 / count;
+        seeds.push({
+          x: c.x + Math.cos(a) * START_OFFSET,
+          y: c.y + Math.sin(a) * START_OFFSET,
+          dir: c.q >= 0 ? 1 : -1
+        });
+      }
+    }
+    return seeds;
+  }
+
+  // 직각 꺾임과 끊김 해결을 위한 물리 엔진 (Runge-Kutta 4th Order 도입)
+  function traceLine(seed) {
+    const pts = [{x:seed.x, y:seed.y}];
+    let x = seed.x, y = seed.y;
+    
+    // 부드러운 전개를 위해 STEP은 줄이고 계산 수는 대폭 늘림
+    const limitSteps = isDraggingCharge ? 3000 : 15000;
+    let hitPositive = false;
+
+    for (let i = 0; i < limitSteps; i++) {
+      // 1. 가변 스텝 ( Adaptive Step) 최적화
+      let currentStep = STEP;
+      
+      // 화면 밖에서는 속도를 위해 보폭 증가
+      const viewBuffer = 200;
+      if (x < -viewBuffer || x > W + viewBuffer || y < -viewBuffer || y > H + viewBuffer) {
+        currentStep = STEP * 4.0;
+      }
+
+      // 2. RK4 미분 방식 적용 (부드러운 곡선 추적 핵심)
+      // dir: 1(정방향추적), -1(음전하 역추적)
+      
+      // k1
+      const f1 = getFieldUnitVector(x, y);
+      if (!f1) break; // 전기장 사라짐
+      const k1x = f1.ux * seed.dir;
+      const k1y = f1.uy * seed.dir;
+
+      // k2
+      const f2 = getFieldUnitVector(x + k1x * currentStep * 0.5, y + k1y * currentStep * 0.5);
+      if (!f2) break;
+      const k2x = f2.ux * seed.dir;
+      const k2y = f2.uy * seed.dir;
+
+      // k3
+      const f3 = getFieldUnitVector(x + k2x * currentStep * 0.5, y + k2y * currentStep * 0.5);
+      if (!f3) break;
+      const k3x = f3.ux * seed.dir;
+      const k3y = f3.uy * seed.dir;
+
+      // k4
+      const f4 = getFieldUnitVector(x + k3x * currentStep, y + k3y * currentStep);
+      if (!f4) break;
+      const k4x = f4.ux * seed.dir;
+      const k4y = f4.uy * seed.dir;
+
+      // 최종 이동 벡터 가중 평균
+      const dx = (k1x + 2*k2x + 2*k3x + k4x) / 6;
+      const dy = (k1y + 2*k2y + 2*k3y + k4y) / 6;
+
+      // 움직임이 너무 없으면 (평형점 부근) 끊음
+      if (Math.hypot(dx, dy) < 1e-6) break;
+
+      const nx = x + currentStep * dx;
+      const ny = y + currentStep * dy;
+
+      // 진동 발생 시 탈출
+      if (Math.hypot(nx - pts[pts.length-1].x, ny - pts[pts.length-1].y) < 0.001) break;
+      
+      x = nx; y = ny;
+      pts.push({x, y});
+
+      // 거대 궤적 확보 (무한대 경계 확장)
+      const infiniteBound = 20000;
+      if (x < -infiniteBound || x > infiniteBound || y < -infiniteBound || y > infiniteBound) break;
+
+      // 3. 충돌 검사 (전하 흡수)
+      let hitTarget = false;
+      for (const c of activeCharges()) {
+        if (Math.abs(c.q) < 1e-9) continue; // 0전하는 무시
+        const d = Math.hypot(x - c.x, y - c.y);
+        if (d <= CHARGE_RADIUS) {
+          // 정확히 표면에 안착
+          pts[pts.length - 1] = {
+            x: c.x + (x - c.x) / Math.max(d, 1e-6) * CHARGE_RADIUS,
+            y: c.y + (y - c.y) / Math.max(d, 1e-6) * CHARGE_RADIUS
+          };
+          hitTarget = true;
+          if (c.q > 0) hitPositive = true;
+          break;
+        }
+      }
+      if (hitTarget) break;
+    }
+
+    // 중복 제거 (음전하 역추적 선이 양전하에 닿으면 렌더링 취소)
+    if (seed.dir === -1) {
+      if (hitPositive) return null; 
+      pts.reverse();
+    }
+    
+    return pts;
+  }
+
+  function simplifyPoints(points, minDist=1.5) {
+    if (points.length <= 2) return points;
+    const result = [points[0]];
+    let last = points[0];
+    for (let i = 1; i < points.length - 1; i++) {
+      const p = points[i];
+      if (Math.hypot(p.x - last.x, p.y - last.y) >= minDist) {
+        result.push(p);
+        last = p;
+      }
+    }
+    result.push(points[points.length - 1]);
+    return result;
+  }
+
+  function computeLines() {
+    lines = [];
+    if (activeCharges().length === 0) return;
+    const seeds = buildSeeds();
+    for (const s of seeds) {
+      // RK4 엔진으로 추적
+      const trace = traceLine(s);
+      if (trace) {
+        // 드로잉 퍼포먼스를 위해 점 단순화 (시각적 품질 유지)
+        const pts = simplifyPoints(trace, 1.2);
+        if (pts.length > 5) lines.push(pts);
+      }
+    }
+  }
+
+  function drawGrid() {
+    if (!showGrid) return;
+    ctx.save();
+    ctx.strokeStyle = '#e6e8ec';
+    ctx.lineWidth = 1 / camera.zoom; 
+
+    const left = -camera.x / camera.zoom;
+    const right = left + W / camera.zoom;
+    const top = -camera.y / camera.zoom;
+    const bottom = top + H / camera.zoom;
+
+    const step = 40;
+    const startX = Math.floor(left / step) * step;
+    const startY = Math.floor(top / step) * step;
+
+    for (let x = startX; x <= right; x += step) {
+      ctx.beginPath(); ctx.moveTo(x, top); ctx.lineTo(x, bottom); ctx.stroke();
+    }
+    for (let y = startY; y <= bottom; y += step) {
+      ctx.beginPath(); ctx.moveTo(left, y); ctx.lineTo(right, y); ctx.stroke();
+    }
+    ctx.restore();
+  }
+
+  function drawArrowHead(x, y, angle, size=8, color='#111') {
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.rotate(angle);
+    ctx.beginPath();
+    ctx.moveTo(0, 0);
+    ctx.lineTo(-size, size * 0.58);
+    ctx.lineTo(-size, -size * 0.58);
+    ctx.closePath();
+    ctx.fillStyle = color;
+    ctx.fill();
+    ctx.restore();
+  }
+
+  // 베지에 곡선을 이용한 부드러운 렌더링
+  function drawSmoothCurve(pts) {
+    if (pts.length < 2) return;
+    ctx.beginPath();
+    ctx.moveTo(pts[0].x, pts[0].y);
+    if (pts.length === 2) { ctx.lineTo(pts[1].x, pts[1].y); return; }
+    for (let i = 1; i < pts.length - 1; i++) {
+      const xc = (pts[i].x + pts[i+1].x) / 2;
+      const yc = (pts[i].y + pts[i+1].y) / 2;
+      ctx.quadraticCurveTo(pts[i].x, pts[i].y, xc, yc);
+    }
+    const n = pts.length;
+    ctx.quadraticCurveTo(pts[n-1].x, pts[n-1].y, pts[n-1].x, pts[n-1].y);
+  }
+
+  function samplePointAlongPolyline(pts, targetDist) {
+    let acc = 0;
+    for (let i = 1; i < pts.length; i++) {
+      const a = pts[i-1], b = pts[i];
+      const seg = Math.hypot(b.x-a.x, b.y-a.y);
+      if (acc + seg >= targetDist) {
+        const t = (targetDist - acc) / seg;
+        return {
+          x: a.x + (b.x-a.x) * t,
+          y: a.y + (b.y-a.y) * t,
+          angle: Math.atan2(b.y-a.y, b.x-a.x),
+        };
+      }
+      acc += seg;
+    }
+    return null;
+  }
+
+  function drawFieldLines() {
+    ctx.save();
+    ctx.strokeStyle = '#111111';
+    // 줌 레벨에 따라 선 굵기 조정 (너무 얇아지거나 굵어지지 않게)
+    ctx.lineWidth = clamp(2.2 / camera.zoom, 0.8, 3);
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+
+    for (const pts of lines) {
+      drawSmoothCurve(pts);
+      ctx.stroke();
+
+      const total = pts.reduce((sum, p, i) => i === 0 ? 0 : sum + Math.hypot(p.x-pts[i-1].x, p.y-pts[i-1].y), 0);
+      const arrowEvery = 105 / camera.zoom; 
+      // 화살표 렌더링
+      for (let d = arrowEvery; d < total - (30/camera.zoom); d += arrowEvery) {
+        const p = samplePointAlongPolyline(pts, d);
+        if (p) drawArrowHead(p.x, p.y, p.angle, clamp(8 / camera.zoom, 4, 12), '#111111');
+      }
+    }
+    ctx.restore();
+  }
+
+  function drawCharge(c) {
+    ctx.save();
+    
+    // 전하량이 0일 때 반투명 처리
+    const isZero = Math.abs(c.q) < 1e-9;
+    if (isZero) ctx.globalAlpha = 0.65; 
+
+    const grad = ctx.createRadialGradient(c.x - 6, c.y - 8, 3, c.x, c.y, CHARGE_RADIUS);
+    if (c.q > 1e-9) {
+      grad.addColorStop(0, '#ffd8d2'); grad.addColorStop(0.35, '#ff6e62'); grad.addColorStop(1, '#b30000');
+    } else if (c.q < -1e-9) {
+      grad.addColorStop(0, '#dff0ff'); grad.addColorStop(0.35, '#49aaf0'); grad.addColorStop(1, '#00508f');
+    } else {
+      grad.addColorStop(0, '#f9fafb'); grad.addColorStop(0.35, '#d1d5db'); grad.addColorStop(1, '#6b7280');
+    }
+    
+    ctx.beginPath();
+    ctx.arc(c.x, c.y, CHARGE_RADIUS, 0, Math.PI * 2);
+    ctx.fillStyle = grad;
+    ctx.fill();
+    ctx.lineWidth = 1.8 / camera.zoom;
+    ctx.strokeStyle = 'rgba(0,0,0,.28)';
+    ctx.stroke();
+
+    ctx.globalAlpha = 1.0; 
+
+    ctx.fillStyle = 'white';
+    // 줌에 따른 폰트 크기 조정
+    ctx.font = `bold ${clamp(38 / camera.zoom, 16, 50)}px Arial`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    const sign = c.q > 1e-9 ? '+' : (c.q < -1e-9 ? '−' : '0');
+    ctx.fillText(sign, c.x, c.y + (2/camera.zoom));
+
+    ctx.font = `bold ${clamp(13 / camera.zoom, 9, 16)}px Arial`;
+    ctx.fillStyle = '#111827';
+    ctx.fillText(c.id, c.x, c.y + CHARGE_RADIUS + (15/camera.zoom));
+    
+    ctx.restore();
+  }
+
+  function drawProbe() {
+    const px = probe.x;
+    const py = probe.y;
+
+    let V = 0;
+    for (const c of activeCharges()) {
+      // 거리 r (전하 반경 내부면 반경으로 고정하여 발산 방지)
+      const r = Math.max(Math.hypot(px - c.x, py - c.y), CHARGE_RADIUS);
+      V += (K * c.q) / r;
+    }
+
+    ctx.save();
+    
+    // 십자 마크
+    ctx.strokeStyle = 'var(--purple)';
+    ctx.lineWidth = clamp(3 / camera.zoom, 1.5, 5);
+    ctx.beginPath();
+    ctx.arc(px, py, clamp(14 / camera.zoom, 6, 20), 0, Math.PI * 2);
+    const lineLen = clamp(22/camera.zoom, 10, 30);
+    ctx.moveTo(px - lineLen, py); ctx.lineTo(px + lineLen, py);
+    ctx.moveTo(px, py - lineLen); ctx.lineTo(px, py + lineLen);
+    ctx.stroke();
+
+    // 전위 텍스트 (줌 대응)
+    const label = `V = ${V > 0 ? '+' : ''}${V.toFixed(1)} V`;
+    const fontSize = clamp(16 / camera.zoom, 10, 20);
+    ctx.font = `bold ${fontSize}px Arial`;
+    const tw = ctx.measureText(label).width;
+    
+    const bgW = tw + fontSize;
+    const bgH = fontSize * 1.8;
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.85)';
+    ctx.fillRect(px + lineLen * 0.8, py - lineLen * 1.3, bgW, bgH);
+    
+    ctx.fillStyle = '#333333';
+    ctx.textBaseline = 'top';
+    ctx.fillText(label, px + lineLen * 0.8 + fontSize*0.5, py - lineLen * 1.3 + fontSize*0.4);
+    
+    ctx.restore();
+  }
+
+  function drawVector(info) {
+    if (!info) return;
+    const scale = Number(ui.arrowScaleRange.value);
+    const {x, y, Ex, Ey, E} = info;
+    const ang = Math.atan2(Ey, Ex);
+    const len = clamp(50 + Math.log10(E + 1) * 36 * scale, 60, 240);
+
+    const sx = x * camera.zoom + camera.x;
+    const sy = y * camera.zoom + camera.y;
+    const ex = sx + Math.cos(ang) * len;
+    const ey = sy + Math.sin(ang) * len;
+
+    ctx.save();
+    ctx.setTransform(1, 0, 0, 1, 0, 0); 
+    ctx.strokeStyle = '#15803d';
+    ctx.fillStyle = '#15803d';
+    ctx.lineWidth = 5;
+    ctx.beginPath(); ctx.moveTo(sx, sy); ctx.lineTo(ex, ey); ctx.stroke();
+    
+    ctx.translate(ex, ey);
+    ctx.rotate(ang);
+    ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(-15, 15 * 0.58); ctx.lineTo(-15, -15 * 0.58); ctx.closePath();
+    ctx.fill();
+    ctx.rotate(-ang);
+    ctx.translate(-ex, -ey);
+
+    ctx.beginPath(); ctx.arc(sx, sy, 5, 0, Math.PI * 2); ctx.fill();
+
+    const label = `E = ${E.toExponential(2)} N/C`;
+    ctx.font = 'bold 17px Arial';
+    const tw = ctx.measureText(label).width;
+    const bx = clamp(ex + 14, 10, W - tw - 22);
+    const by = clamp(ey - 24, 12, H - 30);
+
+    ctx.fillStyle = 'rgba(255,255,255,.95)';
+    ctx.strokeStyle = 'rgba(0,0,0,.15)';
+    ctx.lineWidth = 1.2;
+    ctx.beginPath();
+    ctx.roundRect(bx - 8, by - 19, tw + 16, 30, 9);
+    ctx.fill(); ctx.stroke();
+    
+    ctx.fillStyle = '#15803d';
+    ctx.fillText(label, bx, by);
+    ctx.restore();
+  }
+
+  function render() {
+    if (!W || !H) return;
+    // 캔버스 초기화
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.clearRect(0, 0, W, H);
+    
+    // 카메라 Transform 적용 (World Space)
+    ctx.translate(camera.x, camera.y);
+    ctx.scale(camera.zoom, camera.zoom);
+    
+    drawGrid();
+    drawFieldLines(); // RK4 기반 선 그리기
+    activeCharges().forEach(drawCharge);
+    drawProbe(); 
+    
+    // Screen Space 항목 렌더링
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    drawVector(hoverInfo); 
+  }
+
+  function recomputeAndRender() {
+    updateTopLabels();
+    computeLines(); // 물리 연산 실행
+    render();
+  }
+
+  function scheduleCompute() {
+    updateTopLabels();
+    // 드래그 중엔 전하와 격자만 그리고 연산은 지연시킴 (UI 반응성 확보)
+    if (isDraggingCharge) {
+        render();
+    } else {
+        render(); // 이전 상태 유지
+    }
+    clearTimeout(calcTimer);
+    calcTimer = setTimeout(() => {
+      computeLines();
+      render();
+    }, isDraggingCharge ? 10 : 50); 
+  }
+
+  function canvasPoint(evt) {
+    const rect = canvas.getBoundingClientRect();
+    return { x: evt.clientX - rect.left, y: evt.clientY - rect.top };
+  }
+  function screenToWorld(p) {
+    return { x: (p.x - camera.x) / camera.zoom, y: (p.y - camera.y) / camera.zoom };
+  }
+  
+  function findHit(wx, wy) {
+    // 프로브 우선 판정
+    const probeHitR = clamp(20 / camera.zoom, 15, 30);
+    if (Math.hypot(wx - probe.x, wy - probe.y) <= probeHitR) return { type: 'probe' };
+    
+    // 전하 판정
+    const c = activeCharges().find(c => Math.hypot(wx - c.x, wy - c.y) <= CHARGE_RADIUS);
+    if (c) return { type: 'charge', id: c.id };
+    
+    return null;
+  }
+  
+  function nearestPointOnLines(wx, wy) {
+    let best = null, bestD = Infinity;
+    const hitDist = CLICK_TOL / camera.zoom;
+    for (const pts of lines) {
+      // 성능을 위해 점 듬성듬성 검사
+      for (let i = 0; i < pts.length; i += 3) {
+        const p = pts[i];
+        const d = Math.hypot(wx - p.x, wy - p.y);
+        if (d < bestD) { bestD = d; best = p; }
+      }
+    }
+    return bestD <= hitDist ? best : null;
+  }
+
+  // --- 이벤트 리스너 (기존 유지) ---
+  canvas.addEventListener('mousedown', (e) => {
+    const p = canvasPoint(e);
+    const wp = screenToWorld(p);
+    const hit = findHit(wp.x, wp.y);
+    
+    mouseMoveDist = 0;
+    lastMouseP = p;
+
+    if (hit) {
+      if (hit.type === 'probe') {
+        draggingId = 'probe';
+      } else {
+        draggingId = hit.id;
+        isDraggingCharge = true;
+      }
+    } else {
+      isPanning = true;
+      canvas.style.cursor = 'grabbing';
+      panStart = { sx: p.x, sy: p.y, cx: camera.x, cy: camera.y };
+    }
+  });
+
+  window.addEventListener('mousemove', (e) => {
+    const p = canvasPoint(e);
+    if (lastMouseP.x === 0) { lastMouseP = p; return; }
+    mouseMoveDist += Math.hypot(p.x - lastMouseP.x, p.y - lastMouseP.y);
+    lastMouseP = p;
+
+    if (isPanning) {
+      camera.x = panStart.cx + (p.x - panStart.sx);
+      camera.y = panStart.cy + (p.y - panStart.sy);
+      render();
+      return;
+    }
+
+    if (draggingId) {
+      const wp = screenToWorld(p);
+      
+      if (draggingId === 'probe') {
+        probe.x = wp.x;
+        probe.y = wp.y;
+        render(); // 프로브는 즉시 렌더
+      } else {
+        const c = charges.find(ch => ch.id === draggingId);
+        c.x = wp.x; 
+        c.y = wp.y;
+        hoverInfo = null;
+        scheduleCompute(); // 전하는 지연 연산
+      }
+    }
+  });
+
+  window.addEventListener('mouseup', () => {
+    if (isDraggingCharge) {
+      isDraggingCharge = false;
+      computeLines(); // 드래그 끝나면 고품질 연산
+      render(); 
+    }
+    draggingId = null;
+    isPanning = false;
+    canvas.style.cursor = 'grab';
+  });
+
+  canvas.addEventListener('wheel', (e) => {
+    e.preventDefault();
+    const zoomFactor = 1.1;
+    const direction = e.deltaY > 0 ? -1 : 1;
+    const prevZoom = camera.zoom;
+
+    if (direction > 0) camera.zoom *= zoomFactor;
+    else camera.zoom /= zoomFactor;
+    camera.zoom = clamp(camera.zoom, 0.05, 20); // 줌 범위 확장
+
+    const p = canvasPoint(e);
+    // 마우스 포인터 기준으로 줌
+    camera.x = p.x - (p.x - camera.x) * (camera.zoom / prevZoom);
+    camera.y = p.y - (p.y - camera.y) * (camera.zoom / prevZoom);
+    
+    hoverInfo = null;
+    // 줌 변경 시에는 부드러움을 위해 선을 재계산하지 않고 Transform만 적용하여 그림
+    // (필요시 타이머로 재계산 호출 가능)
+    render(); 
+  }, { passive: false });
+
+  canvas.addEventListener('click', (e) => {
+    if (mouseMoveDist > 5) return; // 드래그 시 클릭 방지
+    const p = canvasPoint(e);
+    const wp = screenToWorld(p);
+    
+    if (findHit(wp.x, wp.y)) return;
+    const np = nearestPointOnLines(wp.x, wp.y);
+    
+    if (!np) { hoverInfo = null; render(); return; }
+    hoverInfo = {x: np.x, y: np.y, ...getFieldAt(np.x, np.y)};
+    render();
+  });
+
+  ui.densityRange.addEventListener('input', scheduleCompute);
+  ui.arrowScaleRange.addEventListener('input', () => { updateTopLabels(); render(); });
+  ui.addQ3Btn.addEventListener('click', () => toggleCharge('q3'));
+  ui.addQ4Btn.addEventListener('click', () => toggleCharge('q4'));
+
+  ui.resetBtn.addEventListener('click', () => {
+    charges = defaultCharges();
+    camera = { x: 0, y: 0, zoom: 1 }; 
+    probe = { x: W/2, y: H/4 }; 
+    hoverInfo = null;
+    renderChargesPanel();
+    recomputeAndRender();
+  });
+
+  ui.toggleGridBtn.addEventListener('click', () => {
+    showGrid = !showGrid;
+    ui.toggleGridBtn.textContent = showGrid ? '격자 숨기기' : '격자 보이기';
+    render();
+  });
+
+  // 초기 실행
+  renderChargesPanel();
+  // resizeObserver가 render를 호출하므로 여기선 생략
+})();
+</script>
+</body>
+</html>
