@@ -2,30 +2,110 @@
 <html lang="ko">
 <head>
     <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>물리 시뮬레이션 아카이브</title>
     <style>
-        body { font-family: 'Malgun Gothic', sans-serif; max-width: 800px; margin: 40px auto; padding: 20px; }
-        h1 { color: #2c3e50; text-align: center; }
-        .sim-card { border: 1px solid #e0e0e0; padding: 20px; margin-bottom: 20px; border-radius: 10px; background-color: #f9f9f9; }
-        .sim-card h2 { margin-top: 0; color: #34495e; }
-        .btn { display: inline-block; padding: 10px 15px; background-color: #3498db; color: white; text-decoration: none; border-radius: 5px; }
-        .btn:hover { background-color: #2980b9; }
+        /* 전체 배경 및 폰트 설정 */
+        body { 
+            font-family: 'Malgun Gothic', sans-serif; 
+            background-color: #f4f7f6; 
+            color: #333;
+            margin: 0; 
+            padding: 40px 20px; 
+        }
+        
+        .header { text-align: center; margin-bottom: 50px; }
+        .header h1 { color: #2c3e50; font-size: 2.5em; margin-bottom: 10px;}
+        .header p { color: #7f8c8d; font-size: 1.1em; }
+
+        /* 바둑판(그리드) 형태의 카드 레이아웃 */
+        .grid-container { 
+            display: grid; 
+            grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); 
+            gap: 25px; 
+            max-width: 1000px; 
+            margin: 0 auto; 
+        }
+
+        /* 개별 카드 디자인 */
+        .sim-card { 
+            background: white; 
+            border-radius: 12px; 
+            padding: 25px; 
+            box-shadow: 0 4px 15px rgba(0,0,0,0.05); 
+            transition: transform 0.2s, box-shadow 0.2s;
+            display: flex;
+            flex-direction: column;
+        }
+        
+        /* 마우스 올렸을 때 카드가 살짝 떠오르는 효과 */
+        .sim-card:hover { 
+            transform: translateY(-5px); 
+            box-shadow: 0 8px 25px rgba(0,0,0,0.1); 
+        }
+        
+        .sim-card h2 { margin-top: 0; color: #34495e; font-size: 1.4em; }
+        .sim-card p { color: #666; flex-grow: 1; line-height: 1.5; }
+        
+        /* 버튼 디자인 */
+        .btn { 
+            display: inline-block; 
+            text-align: center;
+            padding: 12px 15px; 
+            background-color: #4a90e2; 
+            color: white; 
+            text-decoration: none; 
+            border-radius: 8px; 
+            font-weight: bold;
+            transition: background-color 0.2s;
+        }
+        .btn:hover { background-color: #357abd; }
     </style>
 </head>
 <body>
-    <h1>수업에 바로 쓰는 물리 시뮬레이션</h1>
-    <p>선생님들이 웹 브라우저에서 바로 실행할 수 있도록 제작한 HTML 시뮬레이션 모음입니다.</p>
 
-    <div class="sim-card">
-        <h2>광전효과 시뮬레이션</h2>
-        <p>빛의 파장과 세기에 따른 광전자 방출을 시각적으로 확인해보세요.</p>
-        <a href="simulations/photoelectric.html" class="btn">실행하기</a>
+    <div class="header">
+        <h1>수업에 바로 쓰는 물리 시뮬레이션</h1>
+        <p>선생님들이 웹 브라우저에서 바로 실행할 수 있도록 제작한 HTML 시뮬레이션 모음입니다.</p>
     </div>
 
-    <div class="sim-card">
-        <h2>운동량 보존 법칙</h2>
-        <p>두 물체의 충돌 전후 운동량 변화를 계산하고 시뮬레이션합니다.</p>
-        <a href="simulations/momentum.html" class="btn">실행하기</a>
+    <div class="grid-container" id="simulation-list">
     </div>
+
+    <script>
+        // 💡 새로운 시뮬레이션이 생기면 이 배열(리스트)에 한 줄만 추가하면 됩니다!
+        const simulations = [
+            { 
+                title: "광전효과 시뮬레이션", 
+                description: "빛의 파장과 세기에 따른 광전자 방출을 시각적으로 확인해보세요.", 
+                link: "simulations/photoelectric.html" 
+            },
+            { 
+                title: "운동량 보존 법칙", 
+                description: "두 물체의 충돌 전후 운동량 변화를 계산하고 시뮬레이션합니다.", 
+                link: "simulations/momentum.html" 
+            },
+            // 예시: 아래처럼 중괄호 {} 세트만 추가하면 카드가 자동으로 하나 더 생깁니다.
+            { 
+                title: "렌즈의 굴절 (준비중)", 
+                description: "볼록렌즈와 오목렌즈를 지나는 빛의 경로를 작도해봅니다.", 
+                link: "#" 
+            }
+        ];
+
+        // HTML에 카드를 그려주는 코드 (건드릴 필요 없음)
+        const container = document.getElementById('simulation-list');
+        simulations.forEach(sim => {
+            const cardHTML = `
+                <div class="sim-card">
+                    <h2>${sim.title}</h2>
+                    <p>${sim.description}</p>
+                    <a href="${sim.link}" class="btn">실행하기</a>
+                </div>
+            `;
+            container.innerHTML += cardHTML;
+        });
+    </script>
+
 </body>
 </html>
