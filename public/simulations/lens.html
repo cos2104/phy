@@ -1,0 +1,824 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pro Optics Lab: 3D Master</title>
+    
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <script type="importmap">
+        {
+            "imports": {
+                "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+                "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+            }
+        }
+    </script>
+    
+    <style>
+        body { margin: 0; overflow: hidden; background: #1a1d26; font-family: 'Pretendard', sans-serif; }
+        #canvas-container { width: 100vw; height: 100vh; position: relative; }
+        
+        /* UI Panel Style */
+        .glass-panel {
+            background: rgba(22, 25, 34, 0.6);
+            backdrop-filter: blur(20px);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            box-shadow: 0 20px 50px rgba(0,0,0,0.6);
+            border-radius: 14px; 
+            color: #eee;
+            transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+        }
+        
+        .panel-minimized {
+            transform: translate(-50%, -150%) !important;
+            opacity: 0;
+            pointer-events: none;
+        }
+
+        /* Custom Slider Style */
+        .styled-slider {
+            -webkit-appearance: none;
+            width: 100%;
+            height: 4px;
+            background: rgba(255, 255, 255, 0.15);
+            border-radius: 2px;
+            outline: none;
+            margin: 6px 0;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+        .styled-slider:hover { background: rgba(255, 255, 255, 0.25); }
+        
+        .styled-slider::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 14px;
+            height: 14px;
+            border-radius: 50%;
+            background: #4ade80;
+            border: 2px solid #1a1d26;
+            box-shadow: 0 0 0 1px rgba(74, 222, 128, 0.5);
+            cursor: pointer;
+            transition: transform 0.1s, box-shadow 0.2s;
+        }
+        .styled-slider::-webkit-slider-thumb:hover {
+            transform: scale(1.2);
+            box-shadow: 0 0 0 4px rgba(74, 222, 128, 0.2);
+        }
+
+        /* Toggle Buttons */
+        .toggle-btn { 
+            background: rgba(255,255,255,0.08); 
+            transition: all 0.2s ease; 
+            cursor: pointer; 
+            border: 1px solid transparent; 
+            color: #94a3b8;
+            font-size: 0.65rem;
+        }
+        .toggle-btn:hover { background: rgba(255,255,255,0.15); color: #fff; }
+        .toggle-btn.active { 
+            background: #22c55e; 
+            color: #000; 
+            font-weight: 700; 
+            box-shadow: 0 2px 8px rgba(34, 197, 94, 0.3);
+        }
+
+        /* Ray Button */
+        .ray-btn { 
+            background: #252a34; 
+            border: 1px solid rgba(255,255,255,0.1);
+            border-radius: 50%; 
+            width: 36px; height: 36px;
+            display: flex; align-items: center; justify-content: center;
+            cursor: pointer; 
+            transition: 0.2s; 
+            color: #64748b;
+        }
+        .ray-btn:hover { 
+            border-color: #4ade80; 
+            color: #4ade80; 
+            background: rgba(74, 222, 128, 0.1);
+        }
+        .ray-btn.active { 
+            background: linear-gradient(135deg, #f59e0b, #d97706); 
+            color: white; 
+            border-color: transparent;
+            box-shadow: 0 0 15px rgba(245, 158, 11, 0.4);
+            transform: scale(1.05);
+        }
+        
+        .cam-btn { 
+            background: rgba(255, 255, 255, 0.05); 
+            border: 1px solid rgba(255,255,255,0.1); 
+            transition: 0.2s; cursor: pointer; color: #94a3b8;
+            border-radius: 5px; padding: 3px 6px; font-size: 0.65rem;
+        }
+        .cam-btn:hover { background: rgba(255, 255, 255, 0.1); border-color: rgba(255,255,255,0.2); color: #fff; }
+
+        .label-text { font-size: 0.65rem; font-weight: 600; color: #94a3b8; letter-spacing: 0.02em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .val-text { font-family: 'Menlo', 'Monaco', monospace; font-size: 0.7rem; color: #f1f5f9; flex-shrink: 0; margin-left: 8px; }
+        
+        .grid-layout {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 1.2rem;
+            align-items: center;
+        }
+      
+      /* --- 모바일 반응형 스타일 (추가된 부분) --- */
+/* --- [개선됨] 모바일 최적화 스타일 --- */
+    @media (max-width: 850px) {
+        /* 1. 메인 패널: 높이 제한 & 스크롤 추가 & 여백 축소 */
+        #main-panel {
+            flex-direction: column;
+            width: 95%;              /* 너비 꽉 채우기 */
+            max-height: 55vh;        /* [핵심] 화면 높이의 55%만 차지하게 제한 */
+            overflow-y: auto;        /* 내용이 넘치면 패널 안에서만 스크롤 */
+            overflow-x: hidden;
+            padding: 10px 12px;      /* 패딩 줄임 */
+            gap: 8px;                /* 간격 줄임 */
+            top: 10px;               /* 상단 여백 줄임 */
+            align-items: stretch;
+            background: rgba(22, 25, 34, 0.85); /* 모바일은 배경을 좀 더 진하게 */
+        }
+
+        /* 2. 상단 타이틀 & 버튼 그룹을 한 줄/두 줄로 압축 */
+        #main-panel > div:first-child {
+            width: 100%;
+            display: grid;
+            grid-template-columns: auto 1fr; /* 타이틀(좌) / 버튼들(우) */
+            gap: 8px;
+            align-items: center;
+            margin-bottom: 5px;
+        }
+
+        /* 타이틀 크기 축소 */
+        #main-panel > div:first-child > div:first-child {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            margin-bottom: 0 !important;
+        }
+        #main-panel .text-lg { font-size: 0.9rem !important; } /* Optics 글자 작게 */
+        #main-panel .text-base { font-size: 0.8rem !important; } /* Lab 3D 글자 작게 */
+
+        /* 버튼 그룹 컨테이너 (우측) */
+        .mobile-btn-group {
+            display: grid;
+            grid-template-columns: 1fr 1fr; /* 2열로 배치 */
+            gap: 4px;
+            width: 100%;
+        }
+
+        /* 버튼들 높이 납작하게 */
+        .toggle-btn, .cam-btn { 
+            padding: 2px 0 !important; 
+            font-size: 10px !important; 
+            height: 24px;
+        }
+
+        /* 3. 슬라이더 그리드: 2열 배치 & 간격 초소형화 */
+        .grid-layout {
+            grid-template-columns: 1fr 1fr; /* 2열 */
+            width: 100%;
+            padding: 0 !important;
+            border: none !important;
+            gap: 12px 15px; /* 가로 간격 15px, 세로 간격 12px */
+            margin-top: 5px;
+        }
+        
+        /* 슬라이더 입력창 위아래 여백 제거 */
+        .styled-slider { margin: 3px 0 !important; height: 3px; }
+        
+        /* 텍스트 크기 더 줄임 */
+        .label-text { font-size: 10px; margin-bottom: 0 !important; }
+        .val-text { font-size: 10px; }
+
+        /* 4. 하단 광선 버튼 & 상태 표시줄 */
+        #main-panel > div:last-child {
+            width: 100%;
+            flex-direction: row;
+            justify-content: space-between;
+            align-items: center;
+            padding: 8px 0 0 0 !important;
+            border: none !important;
+            border-top: 1px solid rgba(255,255,255,0.1) !important;
+            margin-top: 0;
+        }
+        
+        /* 광선 아이콘 크기 조정 */
+        .ray-btn { width: 32px; height: 32px; }
+        
+        /* 상태 텍스트 우측 정렬 */
+        #main-panel > div:last-child > div.text-center {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            text-align: right;
+        }
+    }
+    </style>
+</head>
+<body>
+
+    <div id="canvas-container"></div>
+    
+    <div id="main-panel" class="glass-panel fixed top-4 left-1/2 -translate-x-1/2 w-[90%] max-w-5xl px-5 py-2 z-30 select-none flex items-center justify-between gap-6">
+        
+<div class="flex flex-col gap-1.5 min-w-[130px]">
+    <div class="flex items-center gap-1 mb-0.5">
+        <span class="text-green-400 text-lg font-bold">Optics</span>
+        <span class="text-white text-base font-bold">Lab 3D</span>
+    </div>
+    
+    <div class="mobile-btn-group flex flex-col gap-1.5">
+        <div class="flex bg-black/20 p-0.5 rounded-md">
+            <button id="btn-convex" class="toggle-btn active flex-1 py-1 rounded">볼록</button>
+            <button id="btn-concave" class="toggle-btn flex-1 py-1 rounded">오목</button>
+        </div>
+        <div class="flex bg-black/20 p-0.5 rounded-md">
+            <button id="btn-obj-candle" class="toggle-btn active flex-1 py-1 rounded">🕯️ 양초</button>
+            <button id="btn-obj-arrow" class="toggle-btn flex-1 py-1 rounded">⬆️ 화살표</button>
+        </div>
+        <div class="flex gap-1">
+             <button id="btn-cam-side" class="cam-btn flex-1">📐 측면</button>
+             <button id="btn-cam-obs" class="cam-btn flex-1">👁️ 관찰자</button>
+        </div>
+    </div>
+</div>
+
+        <div class="flex-1 border-l border-white/10 pl-6 grid-layout">
+            <div class="flex flex-col justify-center">
+                <div class="flex justify-between items-center mb-0.5"><span class="label-text">초점 (F)</span><span id="val-focal" class="val-text">20.0</span></div>
+                <input type="range" id="input-focal" min="15" max="45" value="20" step="0.5" class="styled-slider">
+                
+                <div class="flex justify-between items-center mt-1.5 mb-0.5"><span class="label-text text-red-400">깊이 (Z)</span><span id="val-posZ" class="val-text">0.0</span></div>
+                <input type="range" id="input-posZ" min="-20" max="20" value="0" step="0.5" class="styled-slider">
+            </div>
+
+            <div class="flex flex-col justify-center">
+                <div class="flex justify-between items-center mb-0.5"><span class="label-text text-blue-400">거리 (Dist X)</span><span id="val-dist" class="val-text">40.0</span></div>
+                <input type="range" id="input-dist" min="10" max="80" value="40" step="0.5" class="styled-slider">
+                
+                <div class="flex justify-between items-center mt-1.5 mb-0.5"><span class="label-text">크기 (Size)</span><span id="val-height" class="val-text">8.0</span></div>
+                <input type="range" id="input-height" min="4" max="15" value="8" step="0.5" class="styled-slider">
+            </div>
+
+            <div class="flex flex-col justify-center">
+                <div class="flex justify-between items-center mb-0.5"><span class="label-text text-green-400">높이 (Y)</span><span id="val-posY" class="val-text">0.0</span></div>
+                <input type="range" id="input-posY" min="-20" max="20" value="0" step="0.5" class="styled-slider">
+                
+                <div class="flex justify-between items-center mt-1.5 mb-0.5"><span class="label-text">회전 (X-Rot)</span><span id="val-rot" class="val-text">0°</span></div>
+                
+                <div class="flex items-center gap-2">
+                    <span class="text-[10px] text-gray-400" style="white-space: nowrap;">반시계</span>
+                    <input type="range" id="input-rot" min="-180" max="180" value="0" step="5" class="styled-slider flex-1">
+                    <span class="text-[10px] text-gray-400" style="white-space: nowrap;">시계</span>
+                </div>
+            </div>
+        </div>
+
+        <div class="flex flex-col items-center gap-2 min-w-[80px] border-l border-white/10 pl-6">
+            <button id="btn-ray-toggle" class="ray-btn" title="광선 보기 (Toggle Rays)">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                </svg>
+            </button>
+            <div class="text-center">
+                <div id="status-type" class="text-[10px] text-blue-400 font-bold mb-0">실상</div>
+                <div id="status-mag" class="text-[9px] text-gray-400 font-mono">1.00x</div>
+            </div>
+        </div>
+    </div>
+    
+    <button id="btn-toggle-ui" class="fixed top-4 right-4 z-40 bg-slate-800 p-2.5 rounded-full border border-white/20 text-white hover:bg-slate-700 hover:border-green-400 transition-all shadow-lg group">
+        <svg id="icon-toggle" xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 group-hover:text-green-400 transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 15l7-7 7 7" />
+        </svg>
+    </button>
+
+    <div class="absolute bottom-8 left-1/2 -translate-x-1/2 glass-panel px-5 py-2 text-[11px] text-gray-300 pointer-events-none flex items-center gap-2 shadow-2xl z-10 rounded-full">
+        <span class="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse"></span>
+        <span class="font-medium tracking-wide">물체를 드래그하여 이동 (X, Y, Z)</span>
+    </div>
+
+    <script type="module">
+        import * as THREE from 'three';
+        import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+        import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+        import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+        import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
+        import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
+
+        const CONFIG = {
+            focalLength: 20, lensType: 'convex', objType: 'candle',
+            objDist: 40, objHeight: 10, lensRadius: 22, showRays: false,
+            objY: 0, objZ: 0, objRot: 0
+        };
+
+        const container = document.getElementById('canvas-container');
+        const scene = new THREE.Scene();
+        scene.background = new THREE.Color(0x1a1d26); 
+        
+        // 안개 추가
+        scene.fog = new THREE.Fog(0x1a1d26, 200, 1000);
+
+        // 시야 거리 제한
+        const camera = new THREE.PerspectiveCamera(40, window.innerWidth / window.innerHeight, 0.1, 1200);
+        camera.position.set(75, 45, 90); 
+
+        const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false, stencil: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        
+        // [해상도] 2.0 유지 (최신폰 대응)
+        renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2.0)); 
+        
+        renderer.toneMapping = THREE.ACESFilmicToneMapping;
+        renderer.shadowMap.enabled = true;
+        renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+        renderer.autoClear = false;
+        container.appendChild(renderer.domElement);
+
+        // [최종 수정] 모바일 블랙스크린 해결: UnsignedByteType 사용 (호환성 모드)
+        const renderTarget = new THREE.WebGLRenderTarget(
+            window.innerWidth * renderer.getPixelRatio(), 
+            window.innerHeight * renderer.getPixelRatio(), {
+            type: THREE.UnsignedByteType, // [중요] HalfFloatType -> UnsignedByteType 변경
+            format: THREE.RGBAFormat, 
+            stencilBuffer: true, 
+            depthBuffer: true, 
+            samples: 0 // MSAA 비활성화
+        });
+        
+        const composer = new EffectComposer(renderer, renderTarget);
+        const renderPass = new RenderPass(scene, camera);
+        renderPass.clear = true; 
+        
+        const bloomPass = new UnrealBloomPass(new THREE.Vector2(window.innerWidth / 2, window.innerHeight / 2), 1.5, 0.4, 0.85);
+        bloomPass.threshold = 0.75; bloomPass.strength = 0.4; bloomPass.radius = 0.2;
+        composer.addPass(renderPass);
+        composer.addPass(bloomPass);
+
+        const pmremGenerator = new THREE.PMREMGenerator(renderer);
+        scene.environment = pmremGenerator.fromScene(new RoomEnvironment(), 0.04).texture;
+        scene.add(new THREE.AmbientLight(0xffffff, 0.4));
+        
+        const spotLight = new THREE.SpotLight(0xffeebb, 1000);
+        spotLight.position.set(30, 80, 50); spotLight.angle = Math.PI/6; spotLight.penumbra = 0.5;
+        spotLight.castShadow = true; 
+        spotLight.shadow.bias = -0.0005; 
+        spotLight.shadow.mapSize.width = 512;
+        spotLight.shadow.mapSize.height = 512;
+        scene.add(spotLight);
+        
+        const fillLight = new THREE.PointLight(0xccddff, 300); 
+        fillLight.position.set(-50, 20, 50); scene.add(fillLight);
+
+        const maskMat = new THREE.MeshBasicMaterial({
+            color: 0x000000, colorWrite: false, depthWrite: false, stencilWrite: true, 
+            stencilFunc: THREE.AlwaysStencilFunc, stencilRef: 1, stencilZPass: THREE.ReplaceStencilOp, side: THREE.DoubleSide,
+            polygonOffset: true, polygonOffsetFactor: 1, polygonOffsetUnits: 1 
+        });
+        const realConfig = { stencilWrite: true, stencilFunc: THREE.NotEqualStencilFunc, stencilRef: 1 };
+        const imgConfig = { stencilWrite: true, stencilFunc: THREE.EqualStencilFunc, stencilRef: 1, depthTest: false, transparent: false };
+
+        const createMat = (type, config) => {
+            if(type==='wax') return new THREE.MeshStandardMaterial({ color: 0xfff5e1, roughness: 0.3, metalness: 0.1, ...config });
+            if(type==='flame') return new THREE.MeshBasicMaterial({ color: 0xffaa00, ...config });
+            if(type==='wick') return new THREE.MeshStandardMaterial({ color: 0x111111, ...config });
+            if(type==='box') return new THREE.MeshStandardMaterial({ color: 0x6d4c41, roughness: 0.8, ...config });
+            if(type==='marker') return new THREE.MeshBasicMaterial({ color: 0xffffff, ...config });
+            if(type==='arrow') return new THREE.MeshStandardMaterial({ color: 0xff4444, roughness: 0.4, metalness: 0.6, ...config });
+            if(type==='arrow_head') return new THREE.MeshStandardMaterial({ color: 0xff4444, roughness: 0.2, metalness: 0.3, ...config });
+        };
+        const glassMat = new THREE.MeshPhysicalMaterial({
+            color: 0xffffff, metalness: 0.1, roughness: 0.05, transmission: 1.0, thickness: 3.5, ior: 1.52,
+            clearcoat: 1.0, clearcoatRoughness: 0.1, side: THREE.FrontSide, transparent: true, envMapIntensity: 1.5
+        });
+
+        const lensGroup = new THREE.Group(); scene.add(lensGroup);
+        const envGroup = new THREE.Group(); scene.add(envGroup);
+        const objGroup = new THREE.Group(); scene.add(objGroup);
+        const envImgGroup = new THREE.Group(); scene.add(envImgGroup);
+        const imgGroup = new THREE.Group(); scene.add(imgGroup);
+        const ghostGroup = new THREE.Group(); scene.add(ghostGroup);
+        const rayGroup = new THREE.Group(); scene.add(rayGroup);
+
+        function createEnv(type) {
+            const grp = new THREE.Group();
+            const size = type === 'image' ? 1000 : 400; 
+            const config = type === 'real' ? realConfig : imgConfig;
+            
+            const floor = new THREE.Mesh(new THREE.PlaneGeometry(size, size), new THREE.MeshStandardMaterial({ color: 0x5d4037, roughness: 0.7, ...config }));
+            floor.rotation.x = -Math.PI/2; floor.position.y = -26;
+            if(type==='real') floor.receiveShadow = true;
+            floor.renderOrder = type==='real'?1:3;
+            grp.add(floor);
+
+            const grid = new THREE.GridHelper(size, size/50);
+            grid.position.y = -25.9;
+            grid.material = new THREE.LineBasicMaterial({ color: 0x666666, opacity: 0.3, transparent: true, ...config });
+            grid.renderOrder = type==='real'?1:3;
+            grp.add(grid);
+            return grp;
+        }
+        envGroup.add(createEnv('real'));
+        envImgGroup.add(createEnv('image'));
+
+        function createCandle(type) {
+            const grp = new THREE.Group();
+            let config = type === 'real' ? realConfig : imgConfig;
+            let order = type === 'real' ? 2 : 4;
+            if (type === 'ghost') { config = {}; order = 6; }
+
+            const body = new THREE.Mesh(new THREE.CylinderGeometry(1.2, 1.2, 5, 32), type==='ghost' ? new THREE.MeshBasicMaterial({color:0x4488ff, wireframe:true, opacity:0.2, transparent:true}) : createMat('wax', config));
+            body.renderOrder = order;
+            if(type === 'real') { body.castShadow = true; body.receiveShadow = true; }
+            grp.add(body);
+
+            const wick = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.1, 0.6, 8).translate(0, 2.8, 0), type==='ghost' ? new THREE.MeshBasicMaterial({color:0x000}) : createMat('wick', config));
+            wick.renderOrder = order;
+            grp.add(wick);
+
+            const pts = [];
+            for(let i=0; i<=10; i++) pts.push(new THREE.Vector2(Math.sin(i*0.3)*0.5*(1-i/10), i*0.15));
+            const flame = new THREE.Mesh(new THREE.LatheGeometry(pts, 16).translate(0, 3.1, 0), type==='ghost' ? new THREE.MeshBasicMaterial({color:0x00ffff, opacity:0.6, transparent:true}) : createMat('flame', config));
+            flame.renderOrder = order;
+            flame.name = 'flame';
+            grp.add(flame);
+
+            const boxGeo = new THREE.BoxGeometry(8, 10, 8).translate(0, -7.5, 0);
+            const boxMat = type === 'ghost' ? new THREE.MeshBasicMaterial({color: 0x4444ff, wireframe: true, transparent: true, opacity: 0.15}) : createMat('box', config);
+            const box = new THREE.Mesh(boxGeo, boxMat);
+            box.renderOrder = order;
+            if(type === 'real') { box.castShadow = true; box.receiveShadow = true; }
+            grp.add(box);
+
+            const markerGeo = new THREE.BoxGeometry(3, 3, 0.5).translate(0, -5, 4.1);
+            const markerMat = type === 'ghost' ? new THREE.MeshBasicMaterial({color: 0x88ccff, wireframe: true, transparent: true, opacity: 0.3}) : createMat('marker', config);
+            const marker = new THREE.Mesh(markerGeo, markerMat);
+            marker.renderOrder = order;
+            grp.add(marker);
+
+            if(type === 'real') {
+                const light = new THREE.PointLight(0xffaa00, 60, 25);
+                light.position.set(0, 3.5, 0); grp.add(light);
+            }
+            return grp;
+        }
+
+        function createArrow(type) {
+            const grp = new THREE.Group();
+            let config = type === 'real' ? realConfig : imgConfig;
+            let order = type === 'real' ? 2 : 4;
+            if (type === 'ghost') { config = {}; order = 6; }
+
+            const shaftGeo = new THREE.CylinderGeometry(0.6, 0.6, 7, 32).translate(0, 0, 0);
+            const shaftMat = type === 'ghost' 
+                ? new THREE.MeshBasicMaterial({color: 0xcccccc, wireframe: true, opacity: 0.2, transparent: true}) 
+                : createMat('arrow', config);
+            const shaft = new THREE.Mesh(shaftGeo, shaftMat);
+            shaft.renderOrder = order;
+            if(type === 'real') { shaft.castShadow = true; shaft.receiveShadow = true; }
+            grp.add(shaft);
+
+            const headGeo = new THREE.ConeGeometry(1.5, 3, 32).translate(0, 5, 0);
+            const headMat = type === 'ghost'
+                ? new THREE.MeshBasicMaterial({color: 0xff4444, wireframe: true, opacity: 0.3, transparent: true})
+                : createMat('arrow_head', config);
+            const head = new THREE.Mesh(headGeo, headMat);
+            head.renderOrder = order;
+            if(type === 'real') { head.castShadow = true; head.receiveShadow = true; }
+            grp.add(head);
+
+            const boxGeo = new THREE.BoxGeometry(8, 6, 8).translate(0, -6.5, 0);
+            const boxMat = type === 'ghost' 
+                ? new THREE.MeshBasicMaterial({color: 0x4444ff, wireframe: true, transparent: true, opacity: 0.15})
+                : createMat('box', config);
+            const box = new THREE.Mesh(boxGeo, boxMat);
+            box.renderOrder = order;
+            if(type === 'real') { box.castShadow = true; box.receiveShadow = true; }
+            grp.add(box);
+
+            return grp;
+        }
+
+        const candleHitBox = new THREE.Mesh(new THREE.BoxGeometry(10, 50, 10), new THREE.MeshBasicMaterial({visible:false}));
+        candleHitBox.name = 'hitbox'; 
+        
+        function rebuildObjects() {
+            objGroup.clear();
+            imgGroup.clear();
+            ghostGroup.clear();
+            objGroup.add(candleHitBox);
+            if (CONFIG.objType === 'candle') {
+                objGroup.add(createCandle('real'));
+                imgGroup.add(createCandle('image'));
+                ghostGroup.add(createCandle('ghost'));
+            } else {
+                objGroup.add(createArrow('real'));
+                imgGroup.add(createArrow('image'));
+                ghostGroup.add(createArrow('ghost'));
+            }
+        }
+        
+        rebuildObjects();
+
+        let lensMesh, maskMesh;
+        function updateLens() {
+            if (lensMesh) lensGroup.remove(lensMesh);
+            if (maskMesh) lensGroup.remove(maskMesh);
+            
+            const r = CONFIG.lensRadius, f = CONFIG.focalLength;
+            let geo, maskGeo; const segments = 45; 
+
+            if (CONFIG.lensType === 'convex') {
+                const thickness = Math.max(1.5, 30 / f);
+                geo = new THREE.SphereGeometry(r, segments, 32);
+                geo.scale(thickness / r, 1, 1);
+                maskGeo = geo.clone(); maskGeo.scale(0.99, 0.99, 0.99); 
+            } else {
+                const points = [];
+                for (let i = 0; i <= 60; i++) {
+                    const radius = (i / 60) * r;
+                    const halfThick = 0.1 + (radius * radius) / (f * 20); 
+                    points.push(new THREE.Vector2(radius, halfThick));
+                }
+                for (let i = 60; i >= 0; i--) {
+                    const radius = (i / 60) * r;
+                    const halfThick = 0.1 + (radius * radius) / (f * 20);
+                    points.push(new THREE.Vector2(radius, -halfThick));
+                }
+                points.push(points[0]);
+                geo = new THREE.LatheGeometry(points, segments).rotateZ(-Math.PI/2);
+                maskGeo = geo.clone(); maskGeo.scale(0.98, 0.98, 0.98); 
+            }
+            maskMesh = new THREE.Mesh(maskGeo, maskMat); maskMesh.renderOrder = 0; lensGroup.add(maskMesh);
+            lensMesh = new THREE.Mesh(geo, glassMat); 
+            lensMesh.castShadow = true; 
+            lensMesh.receiveShadow = false; 
+            lensMesh.renderOrder = 5; 
+            lensGroup.add(lensMesh);
+        }
+        
+        const standGrp = new THREE.Group();
+        standGrp.add(new THREE.Mesh(new THREE.CylinderGeometry(0.6, 0.6, 25, 16).translate(0, -12.5, 0), new THREE.MeshStandardMaterial({color: 0x888899})));
+        standGrp.add(new THREE.Mesh(new THREE.CylinderGeometry(5, 6, 1, 32).translate(0, -25.5, 0), new THREE.MeshStandardMaterial({color:0x222222})));
+        standGrp.position.y = -CONFIG.lensRadius;
+        lensGroup.add(standGrp);
+        updateLens();
+
+        const fMat = new THREE.MeshBasicMaterial({color:0xffff00});
+        const f1 = new THREE.Mesh(new THREE.SphereGeometry(0.4), fMat);
+        const f2 = new THREE.Mesh(new THREE.SphereGeometry(0.4), fMat);
+        scene.add(f1, f2);
+
+        function updateSim() {
+            const do_val = CONFIG.objDist, f_mag = CONFIG.focalLength, h = CONFIG.objHeight;
+            const f = (CONFIG.lensType === 'convex') ? f_mag : -f_mag;
+            const objY = CONFIG.objY, objZ = CONFIG.objZ;
+            
+            const rotRad = -CONFIG.objRot * (Math.PI / 180);
+
+            let di = 0, m = 0;
+            if (CONFIG.lensType === 'convex' && Math.abs(do_val - f) < 0.1) di = Infinity;
+            else { di = (f * do_val) / (do_val - f); m = -di / do_val; }
+
+            const scaleBase = h / 7.0;
+            objGroup.scale.set(scaleBase, scaleBase, scaleBase);
+            objGroup.position.set(-do_val, objY, objZ);
+            objGroup.rotation.set(rotRad, 0, 0);
+
+            const isReal = di > 0, isInf = (di === Infinity || Math.abs(di) > 2000);
+            
+            const isObserverSide = camera.position.x > 0;
+            imgGroup.visible = isObserverSide && !isInf;
+            envImgGroup.visible = isObserverSide && !isInf;
+            maskMat.depthWrite = isObserverSide;
+            maskMat.stencilWrite = isObserverSide;
+            ghostGroup.visible = CONFIG.showRays;
+
+            if (isInf) {
+                document.getElementById('status-type').innerText = "상 없음";
+                document.getElementById('status-mag').innerText = "∞";
+            } else {
+                const imgY = objY * m, imgZ = objZ * m;
+                imgGroup.position.set(di, imgY, imgZ);
+                ghostGroup.position.set(di, imgY, imgZ);
+                const magScale = Math.abs(m) * scaleBase; const envScale = Math.abs(m);
+                [imgGroup, ghostGroup].forEach(g => {
+                    g.scale.set(magScale, magScale, magScale);
+                    if (m < 0) { g.rotation.set(rotRad + Math.PI, 0, 0); } else { g.rotation.set(rotRad, 0, 0); }
+                });
+                envImgGroup.scale.set(envScale, envScale, envScale); envImgGroup.rotation.z = (m < 0) ? Math.PI : 0; 
+                const txt = isReal ? "실상 (Real)" : "허상 (Virtual)";
+                document.getElementById('status-type').innerText = txt;
+                document.getElementById('status-type').className = isReal ? "text-sm text-blue-400 font-bold mb-0.5" : "text-sm text-red-400 font-bold mb-0.5";
+                document.getElementById('status-mag').innerText = Math.abs(m).toFixed(2) + "x";
+            }
+            f1.position.set(-f_mag, 0, 0); f2.position.set(f_mag, 0, 0);
+            f1.visible = CONFIG.showRays; f2.visible = CONFIG.showRays;
+            drawRays(do_val, di, f, f_mag, isReal, h, objY, objZ, rotRad);
+        }
+
+        const rayMatSolid = new THREE.LineBasicMaterial({ color: 0xffaa00, linewidth: 2 });
+        const rayMatDashed = new THREE.LineDashedMaterial({ color: 0xffaa00, dashSize: 2, gapSize: 1, opacity: 0.5, transparent: true });
+
+        function drawRays(d_o, d_i, f, f_mag, isReal, h, offY, offZ, rotRad) {
+            while(rayGroup.children.length > 0) rayGroup.remove(rayGroup.children[0]);
+            if (!CONFIG.showRays) return;
+
+            const axisLine = new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(-500, 0, 0), new THREE.Vector3(500, 0, 0)]), new THREE.LineDashedMaterial({ color: 0xffffff, dashSize: 2, gapSize: 2, opacity: 0.3, transparent: true }));
+            axisLine.computeLineDistances(); rayGroup.add(axisLine);
+
+            const tipY = (h * 0.45) * Math.cos(rotRad); const tipZ = (h * 0.45) * Math.sin(rotRad);
+            const objTip = new THREE.Vector3(-d_o, offY + tipY, offZ + tipZ);
+            const lensPlanePoint = new THREE.Vector3(0, offY + tipY, offZ + tipZ);
+            
+            addRay(objTip, lensPlanePoint, false);
+            
+            if (CONFIG.lensType === 'convex') {
+                const f2 = new THREE.Vector3(f_mag, 0, 0);
+                const dir = new THREE.Vector3().subVectors(f2, lensPlanePoint).normalize();
+                addRay(lensPlanePoint, dir.multiplyScalar(200).add(lensPlanePoint), false);
+                if (!isReal) { 
+                    const m = -d_i/d_o;
+                    const realImgTip = new THREE.Vector3(d_i, offY*m + tipY*m, offZ*m + tipZ*m);
+                    addRay(realImgTip, lensPlanePoint, true);
+                }
+            } else {
+                const f1 = new THREE.Vector3(-f_mag, 0, 0);
+                const dir = new THREE.Vector3().subVectors(lensPlanePoint, f1).normalize();
+                addRay(lensPlanePoint, dir.multiplyScalar(200).add(lensPlanePoint), false);
+                addRay(f1, lensPlanePoint, true);
+            }
+            const centerDir = new THREE.Vector3().subVectors(new THREE.Vector3(0,0,0), objTip).normalize();
+            addRay(objTip, centerDir.multiplyScalar(300).add(objTip), false);
+        }
+
+        function addRay(p1, p2, dashed) {
+            const line = new THREE.Line(new THREE.BufferGeometry().setFromPoints([p1, p2]), dashed ? rayMatDashed : rayMatSolid);
+            if (dashed) line.computeLineDistances(); rayGroup.add(line);
+        }
+
+        const controls = new OrbitControls(camera, renderer.domElement);
+        controls.enableDamping = true; controls.maxPolarAngle = Math.PI / 2 + 0.1;
+        controls.maxDistance = 500; 
+        
+        controls.addEventListener('start', () => { spotLight.castShadow = false; });
+        controls.addEventListener('end', () => { spotLight.castShadow = true; });
+
+        const raycaster = new THREE.Raycaster();
+        const mouse = new THREE.Vector2();
+        const dragPlane = new THREE.Plane();
+        const dragOffset = new THREE.Vector3();
+        let isDragging = false;
+        
+        renderer.domElement.addEventListener('mousedown', onMouseDown);
+        renderer.domElement.addEventListener('mousemove', onMouseMove);
+        renderer.domElement.addEventListener('mouseup', onMouseUp);
+        renderer.domElement.addEventListener('touchstart', onTouchStart, {passive: false});
+        renderer.domElement.addEventListener('touchmove', onTouchMove, {passive: false});
+        renderer.domElement.addEventListener('touchend', onMouseUp);
+
+        function onMouseDown(event) {
+            handleStart(event.clientX, event.clientY);
+        }
+
+        function onTouchStart(event) {
+            if (event.touches.length === 1) {
+                // event.preventDefault(); // OrbitControls와 충돌 방지 위해 필요시 해제
+                handleStart(event.touches[0].clientX, event.touches[0].clientY);
+            }
+        }
+
+        function handleStart(x, y) {
+            const rect = renderer.domElement.getBoundingClientRect();
+            mouse.x = ((x - rect.left) / rect.width) * 2 - 1;
+            mouse.y = -((y - rect.top) / rect.height) * 2 + 1;
+            raycaster.setFromCamera(mouse, camera);
+            const intersects = raycaster.intersectObject(candleHitBox);
+            if (intersects.length > 0) {
+                isDragging = true; controls.enabled = false; document.body.style.cursor = 'grabbing';
+                const planeNormal = camera.position.clone().sub(objGroup.position).normalize();
+                dragPlane.setFromNormalAndCoplanarPoint(planeNormal, objGroup.position);
+                const intersectionPoint = new THREE.Vector3();
+                raycaster.ray.intersectPlane(dragPlane, intersectionPoint);
+                dragOffset.subVectors(objGroup.position, intersectionPoint);
+            }
+        }
+
+        function onMouseMove(event) {
+            handleMove(event.clientX, event.clientY);
+        }
+
+        function onTouchMove(event) {
+             if (isDragging && event.touches.length === 1) {
+                 event.preventDefault(); // 드래그 중 스크롤 방지
+                 handleMove(event.touches[0].clientX, event.touches[0].clientY);
+             }
+        }
+
+        function handleMove(x, y) {
+            if (!isDragging) return;
+            const rect = renderer.domElement.getBoundingClientRect();
+            mouse.x = ((x - rect.left) / rect.width) * 2 - 1;
+            mouse.y = -((y - rect.top) / rect.height) * 2 + 1;
+            raycaster.setFromCamera(mouse, camera);
+            const intersectionPoint = new THREE.Vector3();
+            if (raycaster.ray.intersectPlane(dragPlane, intersectionPoint)) {
+                const targetPos = intersectionPoint.add(dragOffset);
+                const safeX = Math.min(-10, Math.max(-80, targetPos.x));
+                const safeY = Math.min(20, Math.max(-20, targetPos.y));
+                const safeZ = Math.min(20, Math.max(-20, targetPos.z));
+                objGroup.position.set(safeX, safeY, safeZ);
+                CONFIG.objDist = -safeX; CONFIG.objY = safeY; CONFIG.objZ = safeZ;
+                document.getElementById('input-dist').value = -safeX;
+                document.getElementById('val-dist').innerText = (-safeX).toFixed(1);
+                document.getElementById('input-posY').value = safeY;
+                document.getElementById('val-posY').innerText = safeY.toFixed(1);
+                document.getElementById('input-posZ').value = safeZ;
+                document.getElementById('val-posZ').innerText = safeZ.toFixed(1);
+            }
+        }
+
+        function onMouseUp() { isDragging = false; controls.enabled = true; document.body.style.cursor = 'default'; }
+
+        document.getElementById('btn-cam-side').onclick = () => { camera.position.set(0, 40, 150); camera.lookAt(0,0,0); controls.target.set(0,0,0); };
+        document.getElementById('btn-cam-obs').onclick = () => { camera.position.set(120, 20, 0); camera.lookAt(0,0,0); controls.target.set(0,0,0); };
+        
+        const setLens = (type) => {
+            CONFIG.lensType = type;
+            document.getElementById('btn-convex').className = `toggle-btn ${type==='convex'?'active':''} flex-1 py-1.5 text-[11px] rounded-md`;
+            document.getElementById('btn-concave').className = `toggle-btn ${type==='concave'?'active':''} flex-1 py-1.5 text-[11px] rounded-md`;
+            updateLens();
+        };
+        document.getElementById('btn-convex').onclick = () => setLens('convex');
+        document.getElementById('btn-concave').onclick = () => setLens('concave');
+        
+        const setObj = (type) => {
+            CONFIG.objType = type;
+            document.getElementById('btn-obj-candle').className = `toggle-btn ${type==='candle'?'active':''} flex-1 py-1.5 text-[11px] rounded-md`;
+            document.getElementById('btn-obj-arrow').className = `toggle-btn ${type==='arrow'?'active':''} flex-1 py-1.5 text-[11px] rounded-md`;
+            rebuildObjects();
+        };
+        document.getElementById('btn-obj-candle').onclick = () => setObj('candle');
+        document.getElementById('btn-obj-arrow').onclick = () => setObj('arrow');
+
+
+        const inputs = [
+            ['input-focal', 'focalLength', 'val-focal', true], ['input-dist', 'objDist', 'val-dist', false],
+            ['input-height', 'objHeight', 'val-height', false], ['input-posY', 'objY', 'val-posY', false],
+            ['input-posZ', 'objZ', 'val-posZ', false], ['input-rot', 'objRot', 'val-rot', false]
+        ];
+        inputs.forEach(([id, key, valId, isLens]) => {
+            document.getElementById(id).addEventListener('input', (e) => {
+                const v = parseFloat(e.target.value);
+                document.getElementById(valId).innerText = (key === 'objRot') ? v + "°" : v.toFixed(1);
+                CONFIG[key] = v;
+                if(isLens) updateLens();
+            });
+        });
+
+        const rayBtn = document.getElementById('btn-ray-toggle');
+        rayBtn.onclick = () => { CONFIG.showRays = !CONFIG.showRays; rayBtn.classList.toggle('active', CONFIG.showRays); };
+
+        const ui = document.getElementById('main-panel');
+        const uiBtn = document.getElementById('btn-toggle-ui');
+        const toggleIcon = document.getElementById('icon-toggle');
+        let uiOpen = true;
+        
+        const toggleUI = () => {
+            uiOpen = !uiOpen;
+            if (uiOpen) { 
+                ui.classList.remove('panel-minimized');
+                toggleIcon.innerHTML = '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 15l7-7 7 7" />';
+            } else { 
+                ui.classList.add('panel-minimized'); 
+                toggleIcon.innerHTML = '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />';
+            }
+        };
+        
+        document.addEventListener('dblclick', (e) => { if(e.target === renderer.domElement) toggleUI(); });
+        uiBtn.onclick = toggleUI;
+
+        function animate() {
+            requestAnimationFrame(animate);
+            controls.update();
+            updateSim(); 
+            const t = Date.now() * 0.01;
+            const f = 1 + Math.sin(t)*0.1 + Math.cos(t*2.5)*0.05;
+            [objGroup, imgGroup, ghostGroup].forEach(g => {
+                const flame = g.getObjectByName('flame');
+                if(flame) flame.scale.set(f, f, f);
+            });
+            renderer.clear();
+            composer.render();
+        }
+        animate();
+    </script>
+</body>
+</html>
