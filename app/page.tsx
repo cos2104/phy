@@ -1,45 +1,60 @@
-// app/page.tsx
 export const dynamic = 'force-dynamic';
 
 import { supabase } from '@/lib/supabase';
 import Link from 'next/link';
 
 export default async function HomePage() {
-  const { data: simulations, error } = await supabase.from('simulations').select('*');
+  const { data: simulations, error } = await supabase
+    .from('simulations')
+    .select('*')
+    .order('created_at', { ascending: false });
 
-  // 에러 발생 시 처리
-  if (error) {
-    return <div className="p-10 text-red-500 bg-slate-900 min-h-screen">에러 발생: {error.message}</div>;
-  }
+  if (error) return <div className="p-10 text-red-500 text-center">데이터 로드 실패: {error.message}</div>;
 
   return (
-    <main className="p-10 bg-slate-900 min-h-screen text-white">
-      {/* 헤더 섹션: 제목과 버튼이 항상 세트로 보입니다 */}
-      <div className="flex justify-between items-center mb-12 border-b border-slate-700 pb-6">
-        <h1 className="text-3xl font-bold text-blue-400">물리 시뮬레이션 연구실</h1>
-        <Link href="/upload" className="bg-blue-600 hover:bg-blue-500 px-6 py-2 rounded-lg font-bold transition-colors">
-          신규 등록
-        </Link>
-      </div>
+    <main className="container mx-auto px-4 py-12">
+      {/* Hero Section */}
+      <section className="mb-16 text-center">
+        <h1 className="text-4xl md:text-6xl font-extrabold mb-6 bg-gradient-to-r from-white to-slate-500 bg-clip-text text-transparent">
+          Interactive Physics Lab
+        </h1>
+        <p className="text-lg text-slate-400 max-w-2xl mx-auto leading-relaxed">
+          웹 브라우저에서 바로 실행되는 물리 시뮬레이션입니다. <br/>
+          변수를 직접 조작하며 물리 현상의 원리를 시각적으로 탐구해보세요.
+        </p>
+      </section>
 
-      {/* 시뮬레이션 목록 섹션 */}
+      {/* Simulation Grid */}
       {!simulations || simulations.length === 0 ? (
-        // 데이터가 없을 때
-        <div className="text-center py-20 bg-slate-800 rounded-2xl border-2 border-dashed border-slate-700">
-          <p className="text-xl text-slate-400">아직 등록된 시뮬레이션이 없습니다.</p>
-          <p className="text-sm text-slate-500 mt-2">우측 상단의 '신규 등록' 버튼을 눌러 첫 실험을 추가해보세요!</p>
+        <div className="text-center py-24 border-2 border-dashed border-slate-800 rounded-3xl">
+          <p className="text-slate-500 mb-4 text-lg">등록된 시뮬레이션이 없습니다.</p>
+          <Link href="/upload" className="text-blue-500 hover:underline">첫 번째 실험 등록하기 →</Link>
         </div>
       ) : (
-        // 데이터가 있을 때 그리드 표시
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
           {simulations.map((sim) => (
-            <div key={sim.id} className="border border-slate-700 p-6 rounded-xl shadow-sm bg-slate-800 hover:border-blue-500 transition-all group">
-              <h2 className="text-xl font-semibold group-hover:text-blue-400 transition-colors">{sim.title}</h2>
-              <p className="text-slate-400 my-4 text-sm leading-relaxed">{sim.description}</p>
-              {/* 내부 링크라면 <a> 대신 <Link>를 쓰는 것이 Next.js 성능에 더 좋습니다 */}
-              <Link href={sim.url} className="text-blue-400 font-medium hover:underline text-sm">
-                실험하러 가기 →
-              </Link>
+            <div key={sim.id} className="group relative flex flex-col bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden hover:border-blue-500/50 transition-all duration-300 shadow-2xl">
+              {/* Image Preview */}
+              <div className="aspect-video bg-slate-800 relative overflow-hidden">
+                {sim.image_url ? (
+                  <img src={sim.image_url} alt={sim.title} className="object-cover w-full h-full transition-transform duration-500 group-hover:scale-110" />
+                ) : (
+                  <div className="w-full h-full flex items-center justify-center text-slate-600 italic">No Preview</div>
+                )}
+                <div className="absolute inset-0 bg-gradient-to-t from-slate-950/60 to-transparent" />
+              </div>
+
+              {/* Info */}
+              <div className="p-6">
+                <h3 className="text-xl font-bold mb-2 group-hover:text-blue-400 transition-colors">{sim.title}</h3>
+                <p className="text-slate-400 text-sm line-clamp-2 mb-6 h-10">{sim.description}</p>
+                <Link 
+                  href={sim.url} 
+                  className="inline-flex h-10 items-center justify-center rounded-md bg-slate-800 px-4 text-sm font-bold text-white hover:bg-blue-600 transition-colors w-full"
+                >
+                  실험 시작하기
+                </Link>
+              </div>
             </div>
           ))}
         </div>
