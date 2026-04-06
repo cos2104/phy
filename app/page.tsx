@@ -1,7 +1,7 @@
 // app/page.tsx 수정 버전
 export const dynamic = 'force-dynamic';
 import { supabase } from '@/lib/supabase';
-
+import Link from 'next/link'; // 상단에 추가
 export default async function HomePage() {
   const { data: simulations, error } = await supabase.from('simulations').select('*');
 
@@ -18,6 +18,12 @@ export default async function HomePage() {
   return (
     <main className="p-10 bg-slate-900 min-h-screen text-white">
       <h1 className="text-3xl font-bold text-blue-400 mb-8">물리 시뮬레이션 연구실</h1>
+      <div className="flex justify-between items-center mb-8">
+  <h1 className="text-3xl font-bold text-blue-400">물리 시뮬레이션 연구실</h1>
+  <Link href="/upload" className="bg-blue-600 px-4 py-2 rounded-lg font-bold">
+    신규 등록
+  </Link>
+</div>
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         {simulations.map((sim) => (
           <div key={sim.id} className="border border-slate-700 p-4 rounded-xl shadow-sm bg-slate-800">
