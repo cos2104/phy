@@ -54,7 +54,9 @@ export default async function HomePage() {
           
           <h1 className="text-5xl md:text-7xl font-black mb-8 tracking-tighter text-slate-900 leading-[1.1]">
             수식 너머의 물리를 <br />
-            <span className="text-blue-600 font-black ">직관으로 경험하다</span>
+            <span className="text-blue-600 font-black ">직관으로 경험하다</span>  <br /> 
+            <span className="text-5xl md:text-7xl font-black mb-8 tracking-tighter text-slate-900 leading-[1.1]">
+            전남 물리교육 연구회 </span>
           </h1>
           
           <p className="text-lg md:text-xl text-slate-500 max-w-2xl mx-auto leading-relaxed mb-12 font-medium">
