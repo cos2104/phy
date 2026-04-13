@@ -5,18 +5,17 @@ import { supabase } from '@/lib/supabase';
 import { useRouter, useSearchParams } from 'next/navigation';
 import toast from 'react-hot-toast';
 import Link from 'next/link';
-import { ChevronDown, Check } from 'lucide-react';
+import { ChevronDown, Check, FileText, X } from 'lucide-react';
 
 function UploadForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const editId = searchParams.get('id');
-
-  // 💡 권한 확인을 기다리는 로딩 상태 추가
-  const [isAuthChecking, setIsAuthChecking] = useState(true);
   
+  const [isAuthChecking, setIsAuthChecking] = useState(true);
   const [loading, setLoading] = useState(false);
   const [categories, setCategories] = useState<any[]>([]);
+  
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [category, setCategory] = useState(''); 
@@ -28,6 +27,8 @@ function UploadForm() {
   const [htmlCode, setHtmlCode] = useState('');
   const [file, setFile] = useState<File | null>(null);
   const [thumbnail, setThumbnail] = useState<File | null>(null);
+  const [worksheetFile, setWorksheetFile] = useState<File | null>(null);
+  
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [existingData, setExistingData] = useState<any>(null);
   const [isDragging, setIsDragging] = useState(false);
@@ -44,28 +45,22 @@ function UploadForm() {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  // 💡 데이터 초기화 및 강력한 권한 체크
   useEffect(() => {
     const initData = async () => {
-      // 1. 세션 유무 체크
       const { data: { session } } = await supabase.auth.getSession();
-      
       if (!session) {
-        toast.error('로그인이 필요합니다.', { id: 'upload-auth-error' }); // 고유 ID로 중복 방지
+        toast.error('로그인이 필요합니다.');
         router.push('/');
         return;
       }
 
-      // 2. 승인된 사용자(is_approved)인지 체크
       const { data: profile } = await supabase.from('profiles').select('is_approved').eq('id', session.user.id).single();
-      
       if (!profile?.is_approved) {
-        toast.error('승인된 사용자만 실험을 등록할 수 있습니다.', { id: 'upload-approval-error' }); // 고유 ID 부여
+        toast.error('승인된 사용자만 실험을 등록할 수 있습니다.');
         router.push('/');
         return;
       }
 
-      // 3. 권한이 확인되면 데이터 로딩 시작
       const { data: catData } = await supabase.from('categories').select('*').order('sort_order');
       if (catData) {
         setCategories(catData);
@@ -86,7 +81,7 @@ function UploadForm() {
           setHtmlCode(text);
         }
       }
-      setIsAuthChecking(false); // 인증 및 로딩 완료
+      setIsAuthChecking(false);
     };
     initData();
   }, [editId, router]);
@@ -111,13 +106,13 @@ function UploadForm() {
   const onDrop = (e: React.DragEvent) => {
     e.preventDefault();
     setIsDragging(false);
-    const droppedFile = e.dataTransfer.files[0];
+    const droppedFile = e.dataTransfer.files?.[0];
     if (droppedFile && droppedFile.name.endsWith('.html')) {
       setFile(droppedFile);
       setUploadMode('file');
-      toast.success('파일 로드 완료', { id: 'file-load' });
+      toast.success('파일 로드 완료');
     } else {
-      toast.error('HTML 파일만 업로드 가능합니다.', { id: 'file-error' });
+      toast.error('HTML 파일만 업로드 가능합니다.');
     }
   };
 
@@ -125,13 +120,13 @@ function UploadForm() {
     const iframe = iframeRef.current;
     if (!iframe?.contentWindow || !iframe?.contentDocument) return;
     const h2c = (iframe.contentWindow as any).html2canvas;
-    if (!h2c) return toast.error('캡처 준비 중... 잠시 후 다시 시도해주세요.', { id: 'capture-warn' });
+    if (!h2c) return toast.error('캡처 준비 중... 잠시 후 다시 시도해주세요.');
     h2c(iframe.contentDocument.body, { useCORS: true, allowTaint: true, backgroundColor: null, logging: false }).then((canvas: HTMLCanvasElement) => {
       canvas.toBlob((blob) => {
         if (blob) {
           setThumbnail(new File([blob], "thumb.png", { type: "image/png" }));
           setPreviewUrl(URL.createObjectURL(blob));
-          toast.success('캡처 성공! 📸', { id: 'capture-success' });
+          toast.success('캡처 성공! 📸');
         }
       }, 'image/png');
     });
@@ -139,24 +134,44 @@ function UploadForm() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    if (!title.trim()) return toast.error('제목을 입력해주세요.');
+    if (!description.trim()) return toast.error('설명을 입력해주세요.');
+    if (uploadMode === 'file' && !file && !existingData?.url) return toast.error('HTML 파일을 첨부해주세요.');
+    if (uploadMode === 'code' && !htmlCode.trim() && !existingData?.url) return toast.error('HTML 코드를 입력해주세요.');
+
     setLoading(true);
     const { data: { session } } = await supabase.auth.getSession();
 
     try {
       let finalUrl = existingData?.url || '';
       let finalImageUrl = existingData?.image_url || null;
+      let finalWorksheetUrl = existingData?.worksheet_url || null;
 
       if (file || (uploadMode === 'code' && htmlCode)) {
-        const path = `files/${Math.random()}.html`;
+        const path = `files/${Date.now()}_${Math.random().toString(36).substring(7)}.html`;
         const content = uploadMode === 'file' ? file! : new Blob([htmlCode], { type: 'text/html' });
         await supabase.storage.from('simulations').upload(path, content);
         finalUrl = supabase.storage.from('simulations').getPublicUrl(path).data.publicUrl;
       }
 
       if (thumbnail) {
-        const path = `thumbnails/${Math.random()}.png`;
+        const path = `thumbnails/${Date.now()}_${Math.random().toString(36).substring(7)}.png`;
         await supabase.storage.from('simulations').upload(path, thumbnail);
         finalImageUrl = supabase.storage.from('simulations').getPublicUrl(path).data.publicUrl;
+      }
+
+      if (worksheetFile) {
+        try {
+          const fileExt = worksheetFile.name.split('.').pop();
+          const path = `worksheets/${Date.now()}_${Math.random().toString(36).substring(7)}.${fileExt}`;
+          const { error: wsError } = await supabase.storage.from('simulations').upload(path, worksheetFile);
+          if (wsError) throw wsError;
+          finalWorksheetUrl = supabase.storage.from('simulations').getPublicUrl(path).data.publicUrl;
+        } catch (wsErr: any) {
+          setLoading(false);
+          return toast.error(`학습지 업로드 실패: ${wsErr.message}`); 
+        }
       }
 
       const payload: any = { 
@@ -165,47 +180,50 @@ function UploadForm() {
         category, 
         url: finalUrl, 
         image_url: finalImageUrl,
+        worksheet_url: finalWorksheetUrl,
         user_id: session?.user.id 
       };
       if (editId) payload.id = editId;
 
-      await supabase.from('simulations').upsert(payload);
+      const { error: dbError } = await supabase.from('simulations').upsert(payload);
+      if (dbError) throw dbError;
       
-      toast.success('성공적으로 저장되었습니다!', { id: 'save-success' });
+      toast.success('성공적으로 저장되었습니다!');
       router.refresh();
       setTimeout(() => router.push('/manage'), 300);
     } catch (err: any) {
-      toast.error('저장 오류: ' + err.message, { id: 'save-error' });
-    } finally { setLoading(false); }
+      toast.error('저장 오류: ' + err.message);
+    } finally { 
+      setLoading(false); 
+    }
   };
 
   const currentCategoryName = categories.find(c => c.id === category)?.name || '영역 선택';
 
-  // 💡 권한 체크 중일 때는 로딩 표시를 하여 번쩍거림과 폼 유출을 방지합니다.
   if (isAuthChecking) {
     return (
       <div className="min-h-[60vh] flex flex-col items-center justify-center font-sans antialiased">
         <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-blue-600 mb-4"></div>
-        <p className="font-bold text-gray-500 tracking-tight">사용자 권한 확인 중...</p>
+        <p className="font-bold text-slate-500 tracking-tight">사용자 권한 확인 중...</p>
       </div>
     );
   }
 
   return (
-    <main className="container mx-auto px-4 py-4 max-w-7xl font-sans antialiased">
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+    <main className="container mx-auto px-4 py-8 max-w-7xl font-sans antialiased">
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
         <div className="lg:col-span-6 space-y-4">
           <div className="flex justify-between items-center px-1">
-            <h1 className="text-xl font-black text-gray-800 tracking-tight">시뮬레이션 등록하기</h1>
-            <Link href="/manage" className="text-xs font-bold text-gray-400 hover:text-blue-500 transition-colors">← 돌아가기</Link>
+            <h1 className="text-2xl font-black text-slate-900 tracking-tight">시뮬레이션 등록하기</h1>
+            <Link href="/" className="text-sm font-bold text-slate-400 hover:text-blue-500 transition-colors">← 홈으로 가기</Link>
           </div>
           
-          <form onSubmit={handleSubmit} className="bg-white p-6 rounded-[2.5rem] border border-gray-100 shadow-sm space-y-5">
+          <form onSubmit={handleSubmit} className="bg-white p-8 rounded-[2rem] border border-slate-200 shadow-sm space-y-6">
             <div className="grid grid-cols-1 gap-4">
               <input 
                 required 
                 placeholder="실험 제목" 
-                className="w-full bg-gray-50 border-none rounded-2xl px-6 py-4 text-sm font-bold shadow-inner placeholder:text-gray-400 focus:ring-2 focus:ring-blue-100 transition-all" 
+                className="w-full bg-slate-50 border-none rounded-2xl px-6 py-4 text-sm font-bold shadow-inner placeholder:text-slate-400 focus:ring-2 focus:ring-blue-100 transition-all" 
                 value={title} 
                 onChange={(e)=>setTitle(e.target.value)} 
               />
@@ -214,31 +232,28 @@ function UploadForm() {
                 <button
                   type="button"
                   onClick={() => setIsCatOpen(!isCatOpen)}
-                  className="w-full bg-gray-50 border-none rounded-2xl px-6 py-4 text-sm font-bold shadow-inner flex justify-between items-center text-gray-800 hover:bg-gray-100/50 transition-all focus:ring-2 focus:ring-blue-100"
+                  className="w-full bg-slate-50 border-none rounded-2xl px-6 py-4 text-sm font-bold shadow-inner flex justify-between items-center text-slate-800 hover:bg-slate-100/50 transition-all focus:ring-2 focus:ring-blue-100"
                 >
                   <div className="flex gap-4 items-center">
-                    <span className="text-gray-400 font-bold shrink-0">영역 선택</span>
+                    <span className="text-slate-400 font-bold shrink-0">영역 선택</span>
                     <span>{currentCategoryName}</span>
                   </div>
-                  <ChevronDown size={18} className={`text-gray-400 transition-transform duration-300 ${isCatOpen ? 'rotate-180' : ''}`} />
+                  <ChevronDown size={18} className={`text-slate-400 transition-transform duration-300 ${isCatOpen ? 'rotate-180' : ''}`} />
                 </button>
 
                 {isCatOpen && (
-                  <div className="absolute top-[110%] left-0 w-full bg-white border border-gray-100 rounded-[2rem] shadow-2xl z-50 py-3 animate-in fade-in slide-in-from-top-2 duration-200">
+                  <div className="absolute top-[110%] left-0 w-full bg-white border border-slate-100 rounded-[2rem] shadow-2xl z-50 py-3 animate-in fade-in slide-in-from-top-2 duration-200">
                     {categories.map((cat) => (
                       <button
                         key={cat.id}
                         type="button"
                         onClick={() => { setCategory(cat.id); setIsCatOpen(false); }}
-                        className={`w-full flex items-center justify-between px-6 py-3.5 text-sm font-bold transition-colors ${category === cat.id ? 'text-blue-600 bg-blue-50' : 'text-gray-600 hover:bg-gray-50'}`}
+                        className={`w-full flex items-center justify-between px-6 py-3.5 text-sm font-bold transition-colors ${category === cat.id ? 'text-blue-600 bg-blue-50' : 'text-slate-600 hover:bg-slate-50'}`}
                       >
                         {cat.name}
                         {category === cat.id && <Check size={16} />}
                       </button>
                     ))}
-                    {categories.length === 0 && (
-                      <div className="px-6 py-3 text-xs text-gray-400 font-bold">카테고리를 불러오는 중...</div>
-                    )}
                   </div>
                 )}
               </div>
@@ -246,33 +261,74 @@ function UploadForm() {
               <textarea 
                 required 
                 placeholder="실험 설명" 
-                className="w-full bg-gray-50 border-none rounded-2xl px-6 py-4 text-sm font-bold h-24 resize-none shadow-inner placeholder:text-gray-400 focus:ring-2 focus:ring-blue-100 transition-all" 
+                className="w-full bg-slate-50 border-none rounded-2xl px-6 py-4 text-sm font-bold h-24 resize-none shadow-inner placeholder:text-slate-400 focus:ring-2 focus:ring-blue-100 transition-all" 
                 value={description} 
                 onChange={(e)=>setDescription(e.target.value)} 
               />
             </div>
 
-            <div className="flex p-1 bg-gray-100 rounded-xl">
-              <button type="button" onClick={()=>setUploadMode('code')} className={`flex-1 py-2.5 text-xs font-bold rounded-lg transition-all ${uploadMode==='code'?'bg-white text-blue-600 shadow-sm':'text-gray-500'}`}>코드 직접 입력</button>
-              <button type="button" onClick={()=>setUploadMode('file')} className={`flex-1 py-2.5 text-xs font-bold rounded-lg transition-all ${uploadMode==='file'?'bg-white text-blue-600 shadow-sm':'text-gray-500'}`}>HTML 파일 드래그</button>
+            <div className="flex p-1 bg-slate-100 rounded-xl">
+              <button type="button" onClick={()=>setUploadMode('code')} className={`flex-1 py-3 text-xs font-bold rounded-lg transition-all ${uploadMode==='code'?'bg-white text-blue-600 shadow-sm':'text-slate-500'}`}>코드 직접 입력</button>
+              <button type="button" onClick={()=>setUploadMode('file')} className={`flex-1 py-3 text-xs font-bold rounded-lg transition-all ${uploadMode==='file'?'bg-white text-blue-600 shadow-sm':'text-slate-500'}`}>HTML 파일 첨부</button>
             </div>
 
             {uploadMode === 'file' ? (
-              <div onDragOver={onDragOver} onDragLeave={onDragLeave} onDrop={onDrop} className={`border-2 border-dashed rounded-[2rem] p-8 text-center transition-all relative ${isDragging ? 'border-blue-500 bg-blue-50 shadow-inner' : 'border-gray-200 bg-gray-50 shadow-inner'}`}>
-                <input type="file" accept=".html" className="absolute inset-0 opacity-0 cursor-pointer" onChange={(e)=>setFile(e.target.files?.[0]||null)} />
-                <p className="text-xs text-gray-500 font-bold">{file ? `✅ ${file.name}` : 'HTML 파일을 이곳으로 끌어다 놓으세요'}</p>
+              <div onDragOver={onDragOver} onDragLeave={onDragLeave} onDrop={onDrop} className={`border-2 border-dashed rounded-[2rem] p-8 text-center transition-all relative ${isDragging ? 'border-blue-500 bg-blue-50 shadow-inner' : 'border-slate-200 bg-slate-50 shadow-inner'}`}>
+                <input 
+                  type="file" 
+                  accept=".html" 
+                  className="absolute inset-0 opacity-0 cursor-pointer" 
+                  onChange={(e) => {
+                    if (e.target.files && e.target.files.length > 0) setFile(e.target.files[0]);
+                  }} 
+                />
+                <p className="text-sm text-slate-500 font-bold">{file ? `✅ ${file.name}` : 'HTML 파일을 이곳으로 끌어다 놓거나 클릭하세요'}</p>
               </div>
             ) : (
-              <textarea className="w-full bg-slate-900 text-blue-300 border-none rounded-[1.5rem] px-6 py-5 text-[10px] font-mono h-44 shadow-inner" value={htmlCode} onChange={(e)=>setHtmlCode(e.target.value)} />
+              <textarea 
+                className="w-full bg-slate-50 border border-slate-200 text-slate-800 rounded-[1.5rem] px-6 py-5 text-xs font-mono h-44 shadow-inner placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-100 transition-all resize-none leading-relaxed" 
+                value={htmlCode} 
+                onChange={(e)=>setHtmlCode(e.target.value)} 
+                placeholder="여기에 시뮬레이션 HTML 코드를 직접 붙여넣으세요."
+              />
             )}
 
+            <div className="space-y-2 pt-2 border-t border-slate-100">
+              <label className="text-[11px] font-black text-slate-400 uppercase px-1">학습지 첨부 (선택)</label>
+              <div className="relative group">
+                <input 
+                  type="file" 
+                  accept=".pdf,.hwp,.docx,.zip" 
+                  className="hidden" 
+                  id="ws-upload" 
+                  onChange={(e) => {
+                    if (e.target.files && e.target.files.length > 0) setWorksheetFile(e.target.files[0]);
+                  }} 
+                />
+                <label 
+                  htmlFor="ws-upload" 
+                  className={`flex items-center gap-3 px-6 py-4 rounded-2xl border-2 border-dashed transition-all cursor-pointer ${worksheetFile ? 'border-green-200 bg-green-50' : 'border-slate-200 bg-slate-50 hover:border-blue-200'}`}
+                >
+                  <FileText size={20} className={worksheetFile ? 'text-green-500' : 'text-slate-400'} />
+                  <span className="text-sm font-bold text-slate-600 flex-grow">
+                    {worksheetFile ? worksheetFile.name : '학습지 파일 업로드 (PDF, HWP, ZIP 등)'}
+                  </span>
+                  {worksheetFile && (
+                    <button type="button" onClick={(e) => { e.preventDefault(); setWorksheetFile(null); }} className="p-1 hover:bg-green-200 rounded-full text-green-600">
+                      <X size={16} />
+                    </button>
+                  )}
+                </label>
+              </div>
+            </div>
+
             <div className="flex items-center gap-4 bg-blue-50/50 p-4 rounded-[1.5rem] border border-blue-100 shadow-sm">
-              <div className="flex-shrink-0 w-20 h-12 bg-white rounded-xl border border-blue-200 overflow-hidden shadow-sm">
+              <div className="flex-shrink-0 w-24 h-16 bg-white rounded-xl border border-blue-200 overflow-hidden shadow-sm">
                 {previewUrl ? <img src={previewUrl} className="w-full h-full object-cover" /> : <div className="w-full h-full bg-slate-100" />}
               </div>
-              <div className="flex flex-1 gap-2">
-                <button type="button" onClick={handleCapture} className="flex-1 bg-blue-600 text-white text-[11px] font-bold py-3.5 rounded-xl hover:bg-blue-700 active:scale-95 transition-all shadow-md shadow-blue-100">📸 자동 캡처하기</button>
-                <label htmlFor="t-in" className="flex-1 cursor-pointer bg-white text-blue-600 border border-blue-200 text-[11px] font-bold py-3.5 rounded-xl text-center hover:bg-blue-50 transition-all">🖼️ 직접 변경</label>
+              <div className="flex flex-col flex-1 gap-2">
+                <button type="button" onClick={handleCapture} className="w-full bg-blue-600 text-white text-[11px] font-bold py-2 rounded-lg hover:bg-blue-700 active:scale-95 transition-all shadow-sm">📸 자동 캡처하기</button>
+                <label htmlFor="t-in" className="w-full cursor-pointer bg-white text-blue-600 border border-blue-200 text-[11px] font-bold py-2 rounded-lg text-center hover:bg-blue-50 transition-all">🖼️ 직접 변경</label>
                 <input type="file" accept="image/*" className="hidden" id="t-in" onChange={(e)=>{
                   const f = e.target.files?.[0];
                   if(f){ setThumbnail(f); setPreviewUrl(URL.createObjectURL(f)); }
@@ -280,23 +336,23 @@ function UploadForm() {
               </div>
             </div>
 
-            <button disabled={loading} className="w-full bg-gray-900 text-white font-black py-4.5 rounded-[1.5rem] shadow-xl hover:bg-black transition-all disabled:opacity-50">
+            <button disabled={loading} className="w-full bg-slate-900 text-white font-black py-4 rounded-[1.5rem] shadow-xl hover:bg-black transition-all disabled:opacity-50 text-lg">
               {loading ? '처리 중...' : (editId ? '시뮬레이션 업데이트' : '시뮬레이션 저장 및 게시')}
             </button>
           </form>
         </div>
 
-        <div className="lg:col-span-6 lg:sticky lg:top-8">
-          <div className="mb-3 px-1">
-            <h2 className="text-lg font-black text-gray-800 tracking-tight">시뮬레이션 미리보기</h2>
+        <div className="lg:col-span-6 lg:sticky lg:top-24">
+          <div className="mb-4 px-1">
+            <h2 className="text-xl font-black text-slate-800 tracking-tight">시뮬레이션 미리보기</h2>
           </div>
-          <div className="aspect-video w-full border-[8px] border-white bg-slate-200 rounded-[3rem] overflow-hidden shadow-2xl relative ring-1 ring-gray-100">
+          <div className="aspect-[16/10] w-full border-[6px] border-white bg-slate-200 rounded-[2rem] overflow-hidden shadow-2xl relative ring-1 ring-slate-100">
             <iframe ref={iframeRef} className="w-full h-full border-none bg-black" sandbox="allow-scripts allow-same-origin" />
           </div>
-          <div className="mt-6 p-6 bg-gray-900 rounded-[2.5rem] border border-gray-800 shadow-2xl">
-             <p className="text-xs md:text-sm text-blue-400 text-center font-black leading-relaxed">
-              조작 후 <span className="bg-blue-500 text-white px-2 py-1 rounded-md mx-1 text-[10px]">자동 캡처하기</span> 버튼을 누르면 
-              현재 실험 화면이 썸네일로 저장됩니다.
+          <div className="mt-6 p-6 bg-slate-900 rounded-[2rem] border border-slate-800 shadow-xl">
+             <p className="text-sm text-blue-400 text-center font-bold leading-relaxed">
+             조작 후 <span className="bg-blue-500 text-white px-2 py-1 rounded-md mx-1 text-xs">자동 캡처하기</span> 버튼을 누르면 
+             현재 실험 화면이 썸네일로 저장됩니다.
             </p>
           </div>
         </div>
@@ -307,7 +363,7 @@ function UploadForm() {
 
 export default function UploadPage() {
   return (
-    <Suspense fallback={<div className="p-20 text-center font-bold text-gray-500">환경 로딩 중...</div>}>
+    <Suspense fallback={<div className="p-20 text-center font-bold text-slate-500">환경 로딩 중...</div>}>
       <UploadForm />
     </Suspense>
   );
