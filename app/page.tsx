@@ -1,11 +1,15 @@
 'use client';
 
+export const dynamic = 'force-dynamic';
+
 import { useState, useEffect, useMemo } from 'react';
 import { supabase } from '@/lib/supabase';
 import Link from 'next/link';
 import { 
-  Atom, ChevronRight, Boxes, Microscope, 
-  Search, Eye, Heart, X, Sparkles 
+  Atom, Zap, Move, Sun, Boxes, Microscope, Magnet, Activity, Wind, 
+  Droplets, Thermometer, Eye, Compass, Waves, Flame, Rocket, Orbit, 
+  Satellite, Cpu, Layers, Gauge, FlaskConical, Feather, 
+  ChevronRight, ArrowRight, Plus, Sparkles, Search, Heart, X 
 } from 'lucide-react';
 import StickyNav from '@/components/StickyNav';
 import HeroButtons from '@/components/HeroButtons'; 
@@ -31,8 +35,9 @@ interface Simulation {
 }
 
 const ICON_MAP: Record<string, any> = {
-  Atom: Atom,
-  Boxes: Boxes,
+  Move, Zap, Sun, Atom, Boxes, Microscope, Magnet, Activity, Wind,
+  Droplets, Thermometer, Eye, Compass, Waves, Flame, Rocket, Orbit,
+  Satellite, Cpu, Layers, Gauge, FlaskConical, Feather, Sparkles, Search, Heart, X
 };
 
 export default function HomePage() {

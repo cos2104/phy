@@ -1,14 +1,18 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
-import { Boxes, Move, Zap, Sun, Atom, ArrowUp } from 'lucide-react';
+// 💡 카테고리 아이콘 + 위로가기(ArrowUp) 아이콘만 임포트
+import { 
+  Atom, Zap, Move, Sun, Boxes, Microscope, Magnet, Activity, Wind, 
+  Droplets, Thermometer, Eye, Compass, Waves, Flame, Rocket, Orbit, 
+  Satellite, Cpu, Layers, Gauge, FlaskConical, Feather, 
+  ArrowUp 
+} from 'lucide-react';
 
 const ICON_MAP: Record<string, any> = {
-  Move: Move,
-  Zap: Zap,
-  Sun: Sun,
-  Atom: Atom,
-  Boxes: Boxes,
+  Move, Zap, Sun, Atom, Boxes, Microscope, Magnet, Activity, Wind,
+  Droplets, Thermometer, Eye, Compass, Waves, Flame, Rocket, Orbit,
+  Satellite, Cpu, Layers, Gauge, FlaskConical, Feather
 };
 
 export default function StickyNav({ categories = [] }: { categories?: any[] }) {
