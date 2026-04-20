@@ -39,9 +39,8 @@ export default function ViewPage() {
   const [menuSims, setMenuSims] = useState<Array<{ id: string; title: string; category: string }>>([]);
   const [hoveredCategory, setHoveredCategory] = useState<string>('');
   const [lockedCategory, setLockedCategory] = useState<string | null>(null);
-  
   const [isCatalogOpen, setIsCatalogOpen] = useState(false);
-  const [isCatalogSticky, setIsCatalogSticky] = useState(false); // 💡 메뉴 클릭 고정 상태 추가
+  const [isCatalogSticky, setIsCatalogSticky] = useState(false);
   const [mobileTab, setMobileTab] = useState<'sim' | 'info'>('sim');
 
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
@@ -56,49 +55,57 @@ export default function ViewPage() {
     
     async function fetchData() {
       try {
-        const { data, error } = await supabase.from('simulations').select('*').eq('id', id).single();
-        if (error) throw error;
+        const [simRes, sessionRes] = await Promise.all([
+          supabase.from('simulations').select('*').eq('id', id).single(),
+          supabase.auth.getSession()
+        ]);
+
+        if (simRes.error) throw simRes.error;
+        
+        const data = simRes.data;
+        const session = sessionRes.data.session;
+
         setSim(data);
         setLikes(data.like_count || 0);
         setViewCount((data.view_count || 0) + 1);
 
-        await supabase.from('simulations').update({ view_count: (data.view_count || 0) + 1 }).eq('id', id);
+        supabase.from('simulations').update({ view_count: (data.view_count || 0) + 1 }).eq('id', id).then();
 
-        const response = await fetch(data.url);
-        const text = await response.text();
-        setHtmlContent(text);
+        const getHtml = async () => await fetch(data.url).then(res => res.text());
+        const getCatInfo = async () => await supabase.from('categories').select('id, name, icon_name').eq('id', data.category).maybeSingle();
+        const getCats = async () => await supabase.from('categories').select('id, name, icon_name').order('sort_order', { ascending: true });
+        const getSimsList = async () => await supabase.from('simulations').select('id, title, category').order('created_at', { ascending: false });
+        
+        const getLike = async () => {
+          if (!session) return { data: null };
+          return await supabase.from('simulation_likes').select('*').eq('simulation_id', id).eq('user_id', session.user.id).maybeSingle();
+        };
 
-        const [catRes, catsRes, simsRes] = await Promise.all([
-          supabase.from('categories').select('id, name, icon_name').eq('id', data.category).maybeSingle(),
-          supabase.from('categories').select('id, name, icon_name').order('sort_order', { ascending: true }),
-          supabase.from('simulations').select('id, title, category').order('created_at', { ascending: false })
+        if (session) {
+          supabase.from('profiles').select('id, is_admin').eq('id', session.user.id).maybeSingle().then(({ data: profile }) => {
+            if (profile) setMyProfile(profile);
+          });
+        }
+
+        const [htmlText, catInfoRes, catsRes, simsListRes, likeRes] = await Promise.all([
+          getHtml(), 
+          getCatInfo(), 
+          getCats(), 
+          getSimsList(), 
+          getLike()
         ]);
-        if (catRes.data) setCategoryInfo(catRes.data);
+
+        setHtmlContent(htmlText);
+        if (catInfoRes.data) setCategoryInfo(catInfoRes.data);
         if (catsRes.data) {
           setCategories(catsRes.data);
           if (!hoveredCategory && catsRes.data.length > 0) {
             setHoveredCategory(data.category || catsRes.data[0].id);
           }
         }
-        if (simsRes.data) setMenuSims(simsRes.data);
+        if (simsListRes.data) setMenuSims(simsListRes.data);
+        if (likeRes.data) setIsLiked(true);
 
-        const { data: { session } } = await supabase.auth.getSession();
-        if (session) {
-          const { data: profile } = await supabase
-            .from('profiles')
-            .select('id, is_admin')
-            .eq('id', session.user.id)
-            .maybeSingle();
-          if (profile) setMyProfile(profile);
-
-          const { data: likeData } = await supabase
-            .from('simulation_likes')
-            .select('*')
-            .eq('simulation_id', id)
-            .eq('user_id', session.user.id)
-            .maybeSingle();
-          setIsLiked(!!likeData);
-        }
       } catch (err) {
         console.error('로드 실패:', err);
       } finally {
@@ -106,7 +113,7 @@ export default function ViewPage() {
       }
     }
     fetchData();
-  }, [id]);
+  }, [id, hoveredCategory]);
 
   useEffect(() => {
     const handleOutsideClick = (event: MouseEvent) => {
@@ -114,7 +121,7 @@ export default function ViewPage() {
       const target = event.target as Node;
       if (!catalogRef.current.contains(target)) {
         setIsCatalogOpen(false);
-        setIsCatalogSticky(false); // 💡 영역 밖 클릭 시 고정 해제
+        setIsCatalogSticky(false);
         setLockedCategory(null);
       }
     };
@@ -126,21 +133,28 @@ export default function ViewPage() {
     const { data: { session } } = await supabase.auth.getSession();
     if (!session) return toast.error('로그인이 필요한 기능입니다.');
 
+    const previousIsLiked = isLiked;
+    const previousLikes = likes;
+
+    setIsLiked(!previousIsLiked);
+    setLikes(previousIsLiked ? previousLikes - 1 : previousLikes + 1);
+    
+    if (!previousIsLiked) {
+      toast.success('이 실험을 좋아합니다! ❤️', { id: 'like-toast' });
+    }
+
     try {
-      if (isLiked) {
+      if (previousIsLiked) {
         await supabase.from('simulation_likes').delete().eq('simulation_id', id).eq('user_id', session.user.id);
-        await supabase.from('simulations').update({ like_count: likes - 1 }).eq('id', id);
-        setLikes(prev => prev - 1);
-        setIsLiked(false);
+        await supabase.from('simulations').update({ like_count: previousLikes - 1 }).eq('id', id);
       } else {
         await supabase.from('simulation_likes').insert({ simulation_id: id, user_id: session.user.id });
-        await supabase.from('simulations').update({ like_count: likes + 1 }).eq('id', id);
-        setLikes(prev => prev + 1);
-        setIsLiked(true);
-        toast.success('이 실험을 좋아합니다! ❤️');
+        await supabase.from('simulations').update({ like_count: previousLikes + 1 }).eq('id', id);
       }
     } catch (err) {
-      toast.error('오류가 발생했습니다.');
+      setIsLiked(previousIsLiked);
+      setLikes(previousLikes);
+      toast.error('통신 지연으로 추천이 반영되지 않았습니다.');
     }
   };
 
@@ -228,7 +242,6 @@ export default function ViewPage() {
             className="relative"
             onMouseEnter={() => setIsCatalogOpen(true)}
             onMouseLeave={() => {
-              // 💡 클릭으로 고정된 상태가 아닐 때만 닫기
               if (!isCatalogSticky) {
                 setIsCatalogOpen(false);
               }
@@ -236,7 +249,6 @@ export default function ViewPage() {
           >
             <button
               onClick={() => {
-                // 💡 클릭 시 메뉴 상태 토글 및 고정
                 const nextState = !isCatalogSticky;
                 setIsCatalogSticky(nextState);
                 setIsCatalogOpen(true);
@@ -246,11 +258,11 @@ export default function ViewPage() {
               } text-xs sm:text-sm font-bold`}
             >
               <HeaderIcon size={16} className="text-blue-600" />
-              <span className="max-w-[38vw] sm:max-w-[260px] truncate">{sim.title}</span>
+              {/* 💡 상단 메뉴 버튼 텍스트 정렬 유지 */}
+              <span className="max-w-[38vw] sm:max-w-[260px] truncate break-keep">{sim.title}</span>
             </button>
             
             {isCatalogOpen && (
-              // 💡 top-full pt-1 로 보이지 않는 가상의 공간(경계 다리) 확보
               <div className="absolute top-full pt-1 left-0 z-30 animate-in fade-in slide-in-from-top-1 duration-200">
                 <div className="w-[82vw] sm:w-[500px] max-h-[60vh] bg-white border border-slate-200 rounded-2xl shadow-2xl overflow-hidden flex">
                   <div className="w-[35%] min-w-[90px] max-w-[140px] border-r border-slate-100 bg-slate-50/60 overflow-y-auto custom-scrollbar">
@@ -273,7 +285,8 @@ export default function ViewPage() {
                           }`}
                         >
                           <CatIcon size={12} className="sm:w-3.5 sm:h-3.5 shrink-0" />
-                          <span className="truncate">{cat.name}</span>
+                          {/* 💡 확장 메뉴 카테고리 텍스트 정렬 유지 */}
+                          <span className="truncate break-keep">{cat.name}</span>
                         </button>
                       );
                     })}
@@ -288,7 +301,8 @@ export default function ViewPage() {
                             setIsCatalogOpen(false);
                             setIsCatalogSticky(false);
                           }}
-                          className={`block px-2.5 py-2 sm:px-3 sm:py-2.5 rounded-lg text-[11px] sm:text-sm font-semibold transition-colors ${
+                          // 💡 확장 메뉴 시뮬레이션 항목에 break-keep 추가
+                          className={`block px-2.5 py-2 sm:px-3 sm:py-2.5 rounded-lg text-[11px] sm:text-sm font-semibold transition-colors break-keep ${
                             item.id === sim.id ? 'bg-blue-50 text-blue-600' : 'text-slate-600 hover:bg-slate-50'
                           }`}
                         >
@@ -296,7 +310,7 @@ export default function ViewPage() {
                         </Link>
                       ))
                     ) : (
-                      <p className="px-3 py-2 text-[10px] sm:text-xs text-slate-400">해당 카테고리에 시뮬레이션이 없습니다.</p>
+                      <p className="px-3 py-2 text-[10px] sm:text-xs text-slate-400 break-keep">해당 카테고리에 시뮬레이션이 없습니다.</p>
                     )}
                   </div>
                 </div>
@@ -376,10 +390,8 @@ export default function ViewPage() {
               <div className="inline-flex items-center gap-1.5 px-3 py-1 bg-blue-50 text-blue-600 rounded-full text-[10px] font-black tracking-wide mb-4 pr-6">
                 <HeaderIcon size={12} /> {categoryInfo?.name || sim.category}
               </div>
-              {/* 💡 한글 단어 정렬 break-keep 적용 */}
               <h2 className="text-2xl font-black text-slate-900 leading-[1.15] mb-5 tracking-tighter pr-6 break-keep">{sim.title}</h2>
               
-              {/* 💡 한글 단어 정렬 break-keep 적용 */}
               <div className="flex flex-wrap items-center gap-1.5 mb-8 w-full break-keep">
                 <div className="flex items-center gap-1 px-2.5 py-1.5 bg-slate-50 border border-slate-100 rounded-lg text-[11px] font-bold text-slate-500 uppercase tracking-tight whitespace-nowrap">
                   <Eye size={13} /> {viewCount} VIEWS
@@ -403,7 +415,6 @@ export default function ViewPage() {
                   <Info size={16} />
                   <span className="text-[11px] font-black uppercase tracking-widest">실험 가이드</span>
                 </div>
-                {/* 💡 한글 단어 정렬 break-keep 적용 */}
                 <p className="text-[13px] text-slate-600 leading-relaxed whitespace-pre-wrap font-medium break-keep">
                   {sim.description || '이 실험에 대한 설명이 아직 등록되지 않았습니다.'}
                 </p>
@@ -455,10 +466,8 @@ export default function ViewPage() {
           <div className="inline-flex items-center gap-1.5 px-3 py-1 bg-blue-50 text-blue-600 rounded-full text-[10px] font-black tracking-wide mb-3">
             <HeaderIcon size={12} /> {categoryInfo?.name || sim.category}
           </div>
-          {/* 💡 한글 단어 정렬 break-keep 적용 */}
           <h2 className="text-xl font-black text-slate-900 leading-tight mb-4 break-keep">{sim.title}</h2>
           
-          {/* 💡 한글 단어 정렬 break-keep 적용 */}
           <div className="flex flex-wrap gap-2 mb-5 break-keep">
             <div className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-50 border border-slate-100 rounded-full text-[11px] font-bold text-slate-500">
               <Eye size={13} /> {viewCount}
@@ -478,7 +487,6 @@ export default function ViewPage() {
           </div>
           
           <div className="space-y-3 mb-8">
-            {/* 💡 한글 단어 정렬 break-keep 적용 */}
             <p className="text-sm text-slate-600 leading-relaxed whitespace-pre-wrap break-keep">
               {sim.description || '이 실험에 대한 설명이 아직 등록되지 않았습니다.'}
             </p>
@@ -535,7 +543,7 @@ export default function ViewPage() {
               style={{
                 width: '130%',
                 height: '130%',
-                transform: 'scale(0.77)', // 💡 기존에 깨져있던 괄호 닫기 ')' 추가
+                transform: 'scale(0.765)',
                 transformOrigin: 'top left'
               }}
               sandbox="allow-scripts allow-same-origin allow-forms allow-modals"
