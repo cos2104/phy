@@ -24,37 +24,44 @@ export default function HeroButtons() {
     return () => subscription.unsubscribe();
   }, []);
 
-  if (!mounted) return <div className="h-[60px]" />; 
+  const handleGoogleLogin = async () => {
+    await supabase.auth.signInWithOAuth({
+      provider: 'google',
+      options: { redirectTo: window.location.origin }
+    });
+  };
+
+  if (!mounted) return <div className="h-[52px] sm:h-[60px]" />; 
 
   return (
-    <div className="flex flex-col items-center gap-6 animate-in fade-in slide-in-from-bottom-4 duration-1000">
-      <div className="flex flex-wrap items-center justify-center gap-4">
+    <div className="flex flex-col items-center gap-5 sm:gap-6 animate-in fade-in slide-in-from-bottom-4 duration-1000">
+      <div className="flex flex-wrap items-center justify-center gap-3 sm:gap-4">
         {user ? (
           <Link 
             href="/upload" 
-            className="px-8 py-4 rounded-2xl bg-blue-600 text-white font-bold hover:bg-blue-700 transition-all flex items-center gap-2 shadow-lg shadow-blue-200 active:scale-95"
+            className="px-5 sm:px-8 py-3 sm:py-4 rounded-xl sm:rounded-2xl bg-blue-600 text-white text-sm sm:text-base font-bold hover:bg-blue-700 transition-all flex items-center gap-2 shadow-lg shadow-blue-200 active:scale-95"
           >
-            <Plus size={20} /> 실험 등록하기
+            <Plus size={18} className="sm:w-5 sm:h-5" /> 실험 등록하기
           </Link>
         ) : (
           <button 
-            onClick={() => supabase.auth.signInWithOAuth({ provider: 'google' })}
-            className="px-8 py-4 rounded-2xl bg-slate-900 text-white font-bold hover:bg-black transition-all flex items-center gap-2 shadow-xl shadow-slate-200 active:scale-95"
+            onClick={handleGoogleLogin}
+            className="px-5 sm:px-8 py-3 sm:py-4 rounded-xl sm:rounded-2xl bg-slate-900 text-white text-sm sm:text-base font-bold hover:bg-black transition-all flex items-center gap-2 shadow-xl shadow-slate-200 active:scale-95"
           >
-            <LogIn size={20} /> 구글로 시작하기
+            <LogIn size={18} className="sm:w-5 sm:h-5" /> 구글로 시작하기
           </button>
         )}
         
         <a 
           href="#explore" 
-          className="px-8 py-4 rounded-2xl bg-white text-slate-600 border border-slate-200 font-bold hover:bg-slate-50 transition-all flex items-center gap-2 active:scale-95"
+          className="px-5 sm:px-8 py-3 sm:py-4 rounded-xl sm:rounded-2xl bg-white text-slate-600 text-sm sm:text-base border border-slate-200 font-bold hover:bg-slate-50 transition-all flex items-center gap-2 active:scale-95"
         >
           실험 탐구하기 <ArrowRight size={18} />
         </a>
       </div>
 
       {!user && (
-        <p className="text-sm font-medium text-slate-400 bg-slate-100 px-4 py-2 rounded-full">
+        <p className="text-xs sm:text-sm font-medium text-slate-400 bg-slate-100 px-3 sm:px-4 py-2 rounded-full">
           💡 로그인하시면 나만의 물리 시뮬레이션을 등록하고 관리할 수 있습니다.
         </p>
       )}

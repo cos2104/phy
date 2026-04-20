@@ -62,7 +62,8 @@ const [editingCat, setEditingCat] = useState<{ id: string; oldId: string; name: 
         const { data: { session } } = await supabase.auth.getSession();
         if (!session) {
           toast.error('로그인이 필요합니다.');
-          router.push('/');
+          setLoading(false);
+          router.replace('/');
           return;
         }
 

@@ -16,79 +16,109 @@ const ICON_MAP: Record<string, any> = {
 };
 
 export default function StickyNav({ categories = [] }: { categories?: any[] }) {
-  const [progress, setProgress] = useState(0); 
-  const [isFixed, setIsFixed] = useState(false);
+  const [isCompact, setIsCompact] = useState(false);
   const [showTopBtn, setShowTopBtn] = useState(false);
+  const [isMobile, setIsMobile] = useState(false);
+  const [isHoverExpanded, setIsHoverExpanded] = useState(false);
+  const [isMobileExpanded, setIsMobileExpanded] = useState(false);
+  const rafRef = useRef<number | null>(null);
 
   useEffect(() => {
-    const handleScroll = () => {
+    const mediaQuery = window.matchMedia('(max-width: 768px)');
+    const updateMobile = () => setIsMobile(mediaQuery.matches);
+    updateMobile();
+
+    const handleMediaChange = (event: MediaQueryListEvent) => {
+      setIsMobile(event.matches);
+    };
+
+    if (mediaQuery.addEventListener) {
+      mediaQuery.addEventListener('change', handleMediaChange);
+    } else {
+      mediaQuery.addListener(handleMediaChange);
+    }
+
+    const updateScrollState = () => {
       const currentY = window.scrollY;
       setShowTopBtn(currentY > 500);
+      const compactStartY = isMobile ? 260 : 320;
+      const nextCompact = currentY > compactStartY;
+      setIsCompact((prev) => (prev === nextCompact ? prev : nextCompact));
+    };
 
-      // 애니메이션 구간: 100px 지점부터 변하기 시작해서 300px에서 완료
-      const startY = 100;
-      const endY = 300;
-      const distance = endY - startY;
-
-      if (currentY <= startY) {
-        setProgress(0);
-        setIsFixed(false);
-      } else if (currentY > startY && currentY < endY) {
-        setProgress((currentY - startY) / distance);
-        setIsFixed(true); // 변하기 시작할 때부터 상단 고정
-      } else {
-        setProgress(1);
-        setIsFixed(true);
-      }
+    const handleScroll = () => {
+      if (rafRef.current) return;
+      rafRef.current = window.requestAnimationFrame(() => {
+        updateScrollState();
+        rafRef.current = null;
+      });
     };
 
     window.addEventListener('scroll', handleScroll, { passive: true });
-    handleScroll(); 
-    return () => window.removeEventListener('scroll', handleScroll);
+    updateScrollState();
+    return () => {
+      window.removeEventListener('scroll', handleScroll);
+      if (rafRef.current) {
+        window.cancelAnimationFrame(rafRef.current);
+      }
+      if (mediaQuery.removeEventListener) {
+        mediaQuery.removeEventListener('change', handleMediaChange);
+      } else {
+        mediaQuery.removeListener(handleMediaChange);
+      }
+    };
   }, []);
 
   const safeCategories = Array.isArray(categories) ? categories : [];
   if (safeCategories.length === 0) return null;
 
-  const p = progress;
-  
-  // 💡 수정된 핵심 부분: 고정되지 않았을 때는 배경을 하얗게, 고정되었을 때는 반투명하게
-  const bgOpacity = isFixed ? (0.85 + 0.1 * p) : 1; 
-  const blurAmount = isFixed ? (12 * p) : 0;
+  const canExpandDesktop = isCompact && !isMobile;
+  const expanded = !isCompact || (canExpandDesktop && isHoverExpanded) || (isCompact && isMobile && isMobileExpanded);
 
-  // 크기 조절 수치
-  const cardWidth = 160 - (60 * p); 
-  const cardHeight = 160 - (112 * p);
-  const cardRadius = 32 - (16 * p);
-  const cardPadding = 24 - (16 * p);
-  const iconBoxSize = 56 - (24 * p);
-  const iconSize = 28 - (10 * p);
-  const fontSize = 16 - (2 * p);
-  const gapSize = 24 - (12 * p);
+  const bgOpacity = isCompact ? 0.95 : 1;
+  const blurAmount = isCompact ? 10 : 0;
+  const cardRadius = expanded ? 16 : 999;
+  const fontSize = expanded ? (isMobile ? 12 : 13) : (isMobile ? 11 : 12);
+  const iconSize = expanded ? 16 : 13;
+  const cardHeight = expanded ? (isMobile ? 42 : 46) : (isMobile ? 34 : 36);
+  const gapSize = expanded ? (isMobile ? 8 : 12) : (isMobile ? 8 : 10);
+  const navTop = isMobile ? 56 : 64;
+  const containerHeight = expanded ? (isMobile ? 220 : 170) : (isMobile ? 56 : 58);
+  const wrapperHeight = isCompact ? containerHeight + (isMobile ? 12 : 18) : 0;
 
   return (
     <>
-      {/* 앵커 공간: 고정 모드일 때 아래 콘텐츠가 튀어 오르는 것을 방지 */}
-      <div id="explore" className="scroll-mt-32" style={{ height: isFixed ? '180px' : '0px' }} />
+      <div id="explore" className="scroll-mt-32" style={{ height: `${wrapperHeight}px` }} />
 
       <div 
-        className={`w-full transition-shadow duration-300 ${isFixed ? 'fixed top-16 left-0 z-40 shadow-md border-b border-gray-100' : 'relative z-10'}`}
+        className={`w-full transition-all duration-300 ${isCompact ? 'fixed left-0 z-40 shadow-md border-b border-gray-100' : 'relative z-10'}`}
         style={{
+          top: isCompact ? `${navTop}px` : undefined,
           backgroundColor: `rgba(255, 255, 255, ${bgOpacity})`,
           backdropFilter: `blur(${blurAmount}px)`,
-          paddingTop: isFixed ? '10px' : '20px',
-          paddingBottom: isFixed ? '10px' : '20px',
+          paddingTop: isCompact ? (isMobile ? '6px' : '8px') : '16px',
+          paddingBottom: isCompact ? (isMobile ? '6px' : '8px') : '16px',
         }}
+        onMouseEnter={() => canExpandDesktop && setIsHoverExpanded(true)}
+        onMouseLeave={() => canExpandDesktop && setIsHoverExpanded(false)}
       >
-        <nav className="mx-auto max-w-6xl px-4">
+        <nav className={`mx-auto max-w-6xl ${isMobile ? 'px-3' : 'px-4'}`}>
+          {isCompact && isMobile && (
+            <button
+              type="button"
+              onClick={() => setIsMobileExpanded((prev) => !prev)}
+              className="w-full mb-2 h-10 rounded-xl border border-slate-200 bg-white text-xs font-bold text-slate-600"
+            >
+              {isMobileExpanded ? '카테고리 접기' : '카테고리 펼치기'}
+            </button>
+          )}
           <div 
-            className="flex flex-wrap justify-center items-center"
+            className={`items-center ${expanded ? 'flex flex-wrap justify-center' : 'flex justify-center'} ${isCompact && isMobile && !isMobileExpanded ? 'hidden' : ''}`}
             style={{ gap: `${gapSize}px` }}
           >
             {safeCategories.map((cat) => {
               if (!cat) return null;
               const IconComponent = ICON_MAP[cat.icon_name] || Boxes;
-              const isRow = p > 0.4; // 절반 정도 내려오면 가로 배열로 스위치
 
               return (
                 <a
@@ -96,23 +126,21 @@ export default function StickyNav({ categories = [] }: { categories?: any[] }) {
                   href={`#${cat.id}`}
                   className="group bg-white border border-slate-100 hover:border-blue-200 hover:bg-blue-50/50 flex shrink-0 transition-all duration-300 shadow-sm hover:shadow-md"
                   style={{
-                    flexDirection: isRow ? 'row' : 'column',
+                    flexDirection: 'row',
                     alignItems: 'center',
                     justifyContent: 'center',
-                    width: isFixed ? 'auto' : `calc(50% - ${gapSize}px)`,
-                    maxWidth: isFixed ? 'none' : `${cardWidth}px`,
                     height: `${cardHeight}px`,
                     borderRadius: `${cardRadius}px`,
-                    padding: isFixed ? '0 20px' : `${cardPadding}px`,
+                    padding: expanded ? (isMobile ? '0 10px' : '0 12px') : '0 10px',
                   }}
                 >
                   <div
                     className={`flex items-center justify-center rounded-2xl transition-all duration-300 ${cat.bg_class || 'bg-slate-50'} ${cat.color_class || 'text-slate-500'}`}
                     style={{
-                      width: `${iconBoxSize}px`,
-                      height: `${iconBoxSize}px`,
-                      marginBottom: isRow ? '0px' : `${16 - (32 * p)}px`,
-                      marginRight: isRow ? '10px' : '0px',
+                      width: expanded ? '28px' : '24px',
+                      height: expanded ? '28px' : '24px',
+                      marginBottom: '0px',
+                      marginRight: '6px',
                     }}
                   >
                     <IconComponent size={iconSize} />
@@ -133,12 +161,12 @@ export default function StickyNav({ categories = [] }: { categories?: any[] }) {
 
       <button
         onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
-        className={`fixed bottom-8 right-8 p-4 bg-gray-900 text-white rounded-full shadow-2xl transition-all duration-500 z-50 hover:bg-blue-600 hover:-translate-y-2 ${
+        className={`fixed bottom-5 right-4 sm:bottom-8 sm:right-8 p-3 sm:p-4 bg-gray-900 text-white rounded-full shadow-2xl transition-all duration-500 z-50 hover:bg-blue-600 hover:-translate-y-2 ${
           showTopBtn ? 'opacity-100 translate-y-0 scale-100' : 'opacity-0 translate-y-10 scale-90 pointer-events-none'
         }`}
         title="맨 위로 가기"
       >
-        <ArrowUp size={24} />
+        <ArrowUp size={isMobile ? 18 : 24} />
       </button>
     </>
   );

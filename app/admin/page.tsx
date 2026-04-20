@@ -16,7 +16,8 @@ export default function AdminPage() {
       // 1. 세션 확인
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) {
-        router.push('/');
+        setLoading(false);
+        router.replace('/');
         return;
       }
 
@@ -29,7 +30,8 @@ export default function AdminPage() {
 
       if (!myProfile?.is_admin) {
         toast.error('관리자만 접근 가능한 페이지입니다.');
-        router.push('/');
+        setLoading(false);
+        router.replace('/');
         return;
       }
 
