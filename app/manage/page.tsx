@@ -23,7 +23,7 @@ export default function ManagePage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [filterMode, setFilterMode] = useState<'all' | 'mine'>('all');
   
-  // 💡 [신규] 정렬 상태 추가 (최신순, 오래된순, 이름순)
+  // 정렬 상태 (최신순, 오래된순, 이름순)
   const [sortMode, setSortMode] = useState<'latest' | 'oldest' | 'name'>('latest');
 
   const fetchCategories = async () => {
@@ -72,9 +72,9 @@ export default function ManagePage() {
     initPage();
   }, [router]);
 
-  // 💡 [핵심 로직] 필터링 후 정렬까지 처리
+  // 필터링 후 정렬 처리
   const filteredAndSortedSimulations = useMemo(() => {
-    // 1. 먼저 필터링
+    // 1. 필터링
     let result = simulations.filter(sim => {
       const matchesFilter = filterMode === 'all' || sim.user_id === myProfile?.id;
       const matchesSearch = sim.title.toLowerCase().includes(searchQuery.toLowerCase());
@@ -110,6 +110,39 @@ export default function ManagePage() {
     }
   };
 
+  // 💡 [복구됨] 실수로 지워졌던 카테고리 추가 함수
+  const addCategory = async () => {
+    if (!newCat.id || !newCat.name) return toast.error('ID와 이름을 입력하세요.');
+    
+    // DB 제약 조건을 피하기 위한 기본값 세팅
+    const payload = {
+      id: newCat.id.trim().toLowerCase(),
+      name: newCat.name,
+      icon_name: 'Boxes',
+      bg_class: 'bg-slate-50',
+      color_class: 'text-slate-500',
+      sort_order: categories.length + 1
+    };
+
+    const { error } = await supabase.from('categories').insert([payload]);
+    
+    if (error) {
+      console.error(error);
+      return toast.error('추가 실패: ' + error.message);
+    }
+    toast.success('카테고리가 추가되었습니다.');
+    setNewCat({ id: '', name: '' });
+    fetchCategories();
+  };
+
+  // 💡 [복구됨] 실수로 지워졌던 카테고리 삭제 함수
+  const deleteCategory = async (id: string) => {
+    if (!confirm('해당 카테고리를 삭제하시겠습니까?')) return;
+    const { error } = await supabase.from('categories').delete().eq('id', id);
+    if (error) return toast.error('삭제 실패: ' + error.message);
+    fetchCategories();
+  };
+
   if (loading) return (
     <div className="min-h-[60vh] flex flex-col items-center justify-center font-sans antialiased">
       <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-blue-600 mb-4"></div>
@@ -136,7 +169,6 @@ export default function ManagePage() {
         </div>
       </div>
 
-      {/* 💡 검색, 필터, 정렬 통합 컨트롤 바 */}
       <div className="flex flex-col gap-4 mb-6">
         <div className="relative flex-grow">
           <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
@@ -150,13 +182,11 @@ export default function ManagePage() {
         </div>
         
         <div className="flex flex-wrap gap-3">
-          {/* 필터 그룹 */}
           <div className="flex bg-gray-100 p-1 rounded-2xl border border-gray-200 shadow-inner shrink-0">
             <button onClick={() => setFilterMode('all')} className={`px-5 py-2 rounded-xl text-xs font-black transition-all ${filterMode === 'all' ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}>전체</button>
             <button onClick={() => setFilterMode('mine')} className={`px-5 py-2 rounded-xl text-xs font-black transition-all ${filterMode === 'mine' ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}>내 실험</button>
           </div>
 
-          {/* 💡 [신규] 정렬 그룹 */}
           <div className="flex bg-gray-100 p-1 rounded-2xl border border-gray-200 shadow-inner shrink-0">
             <button onClick={() => setSortMode('latest')} className={`flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-black transition-all ${sortMode === 'latest' ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-500'}`}>
               <ArrowUpDown size={14} /> 최신순
@@ -171,7 +201,42 @@ export default function ManagePage() {
         </div>
       </div>
 
-      {/* 테이블 영역 (기존 구조 유지하되 데이터만 연동) */}
+      {showCatManager && myProfile?.is_admin && (
+        <section className="mb-10 bg-slate-50 border border-slate-200 p-6 rounded-3xl animate-in fade-in slide-in-from-top-4 duration-300">
+          <h2 className="text-sm font-black mb-4 flex items-center gap-2 text-slate-700 uppercase tracking-widest">
+            <Shield size={16} className="text-blue-500" /> 마스터 카테고리 관리
+          </h2>
+          
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className="space-y-2">
+              {categories.map(cat => (
+                <div key={cat.id} className="flex items-center justify-between bg-white p-3 rounded-xl border border-slate-100 shadow-sm">
+                  <span className="text-xs font-bold text-slate-700">{cat.name} <span className="text-[10px] text-slate-300 ml-2 font-mono uppercase">{cat.id}</span></span>
+                  <button onClick={() => deleteCategory(cat.id)} className="text-slate-300 hover:text-red-500 transition-colors p-1"><X size={14}/></button>
+                </div>
+              ))}
+            </div>
+            
+            <div className="bg-white p-5 rounded-2xl border border-slate-100 shadow-sm space-y-3">
+              <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">새 카테고리 추가</p>
+              <input 
+                placeholder="영역 ID (예: fluid)" 
+                className="w-full bg-slate-50 border-none rounded-xl px-4 py-2 text-xs font-mono focus:ring-1 focus:ring-blue-500"
+                value={newCat.id} onChange={e => setNewCat({...newCat, id: e.target.value})}
+              />
+              <input 
+                placeholder="영역 이름 (예: 유체역학)" 
+                className="w-full bg-slate-50 border-none rounded-xl px-4 py-2 text-xs font-bold focus:ring-1 focus:ring-blue-500"
+                value={newCat.name} onChange={e => setNewCat({...newCat, name: e.target.value})}
+              />
+              <button onClick={addCategory} className="w-full bg-slate-900 text-white py-2.5 rounded-xl text-xs font-bold flex items-center justify-center gap-2 hover:bg-black transition-all">
+                <Plus size={14} /> 추가하기
+              </button>
+            </div>
+          </div>
+        </section>
+      )}
+
       <div className="bg-white border border-gray-100 rounded-3xl overflow-hidden shadow-sm">
         <table className="w-full text-left border-collapse">
           <thead className="bg-gray-50/50 border-b border-gray-100">
